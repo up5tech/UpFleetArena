@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/permissions/lan_permission_service.dart';
 import '../../lan_networking/domain/lan_discovery.dart';
+import '../../lan_networking/domain/lan_networking_providers.dart';
 import '../domain/lan_lab_controller.dart';
 import '../domain/lan_lab_state.dart';
 

@@ -27,8 +27,11 @@ class LanHostConnection {
   /// Remote peer port.
   final int remotePort;
 
+  // Single subscription on purpose: the controller buffers frames that
+  // arrive before the Host subscribes, so a fast client cannot lose its
+  // first message in a race.
   final StreamController<ProtocolMessage> _frames =
-      StreamController<ProtocolMessage>.broadcast();
+      StreamController<ProtocolMessage>();
   final FrameDecoder _decoder = FrameDecoder();
   bool _closed = false;
 

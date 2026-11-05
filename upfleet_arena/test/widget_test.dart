@@ -14,21 +14,33 @@ void main() {
     expect(find.text('Join Room'), findsOneWidget);
   });
 
-  testWidgets('Later phases are visible but disabled', (
+  testWidgets('Phase 1 entries are enabled and later phases are not', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
 
     expect(find.text('Later'), findsWidgets);
 
-    // The Phase 0 entry stays enabled.
-    final Finder lanLab = find.widgetWithText(ListTile, 'LAN Lab');
-    expect(lanLab, findsOneWidget);
-    expect(tester.widget<ListTile>(lanLab).enabled, isTrue);
+    for (final String title in <String>[
+      'LAN Lab',
+      'Create Room',
+      'Join Room',
+    ]) {
+      final Finder entry = find.widgetWithText(ListTile, title);
+      expect(entry, findsOneWidget, reason: title);
+      expect(tester.widget<ListTile>(entry).enabled, isTrue, reason: title);
+    }
 
-    final Finder createRoom = find.widgetWithText(ListTile, 'Create Room');
-    expect(createRoom, findsOneWidget);
-    expect(tester.widget<ListTile>(createRoom).enabled, isFalse);
+    for (final String title in <String>['Lobby', 'Ship Placement', 'Battle']) {
+      final Finder entry = find.widgetWithText(ListTile, title);
+      await tester.scrollUntilVisible(
+        entry,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(entry, findsOneWidget, reason: title);
+      expect(tester.widget<ListTile>(entry).enabled, isFalse, reason: title);
+    }
   });
 
   testWidgets('The frozen defaults are listed for the tester', (

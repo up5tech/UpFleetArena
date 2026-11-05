@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/providers.dart';
+import 'core/storage/local_preferences.dart';
 
 /// Entry point.
 ///
@@ -14,5 +16,15 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  runApp(const ProviderScope(child: UpFleetArenaApp()));
+
+  final LocalPreferences preferences = await LocalPreferences.open();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        localPreferencesProvider.overrideWithValue(preferences),
+      ],
+      child: const UpFleetArenaApp(),
+    ),
+  );
 }

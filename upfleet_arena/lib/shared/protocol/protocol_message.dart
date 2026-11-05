@@ -8,6 +8,7 @@ import 'protocol_constants.dart';
 class ProtocolMessage {
   const ProtocolMessage({
     required this.messageType,
+    this.protocolVersion = AppProtocol.version,
     this.requestId,
     this.roomId,
     this.playerId,
@@ -38,6 +39,7 @@ class ProtocolMessage {
     }
 
     return ProtocolMessage(
+      protocolVersion: version,
       messageType: type,
       requestId: _optionalString(json['requestId']),
       roomId: _optionalString(json['roomId']),
@@ -47,8 +49,11 @@ class ProtocolMessage {
     );
   }
 
-  /// Protocol version of this envelope.
-  int get protocolVersion => AppProtocol.version;
+  /// Protocol version declared by the sender.
+  ///
+  /// The Host compares this against [AppProtocol.version] and rejects a
+  /// mismatch with `UNSUPPORTED_PROTOCOL_VERSION` (PLAN.md §8.4).
+  final int protocolVersion;
 
   /// Route key, e.g. `room:join` or `game:fire`.
   final String messageType;
@@ -83,6 +88,7 @@ class ProtocolMessage {
 
   /// Returns a copy with the given fields replaced.
   ProtocolMessage copyWith({
+    int? protocolVersion,
     String? messageType,
     String? requestId,
     String? roomId,
@@ -90,6 +96,7 @@ class ProtocolMessage {
     int? expectedStateVersion,
     Map<String, dynamic>? payload,
   }) => ProtocolMessage(
+    protocolVersion: protocolVersion ?? this.protocolVersion,
     messageType: messageType ?? this.messageType,
     requestId: requestId ?? this.requestId,
     roomId: roomId ?? this.roomId,

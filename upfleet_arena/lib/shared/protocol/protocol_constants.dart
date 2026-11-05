@@ -65,6 +65,15 @@ class ProtocolErrorCode {
   static const String frameTooLarge = 'FRAME_TOO_LARGE';
   static const String malformedFrame = 'MALFORMED_FRAME';
   static const String malformedPayload = 'MALFORMED_PAYLOAD';
+
+  // Room-lifecycle codes added in Phase 1. Existing codes are never reworded;
+  // new situations get a new code (PLAN.md §8.4).
+  static const String deviceAlreadyConnected = 'DEVICE_ALREADY_CONNECTED';
+  static const String invalidDisplayName = 'INVALID_DISPLAY_NAME';
+  static const String unknownMessageType = 'UNKNOWN_MESSAGE_TYPE';
+  static const String alreadyJoined = 'ALREADY_JOINED';
+  static const String playerNotFound = 'PLAYER_NOT_FOUND';
+  static const String notRoomMember = 'NOT_ROOM_MEMBER';
 }
 
 /// Client-to-Host message types (PLAN.md §8.2).

@@ -6,62 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/permissions/lan_permission_service.dart';
 import '../../../shared/protocol/protocol_constants.dart';
 import '../../../shared/protocol/protocol_message.dart';
-import '../../lan_networking/data/bonsoir_discovery.dart';
-import '../../lan_networking/data/nsd_discovery.dart';
 import '../../lan_networking/domain/lan_discovery.dart';
+import '../../lan_networking/domain/lan_networking_providers.dart';
 import '../../lan_networking/services/frame_codec.dart';
 import '../../lan_networking/services/tcp_client_service.dart';
 import '../../lan_networking/services/tcp_host_service.dart';
 import 'lan_lab_state.dart';
-
-/// Selects the discovery implementation under evaluation.
-class DiscoveryBackendController extends Notifier<DiscoveryBackend> {
-  @override
-  DiscoveryBackend build() => DiscoveryBackend.bonsoir;
-
-  /// Switches the active backend.
-  void select(DiscoveryBackend backend) => state = backend;
-}
-
-/// The discovery backend used by the LAN Lab.
-final discoveryBackendProvider =
-    NotifierProvider<DiscoveryBackendController, DiscoveryBackend>(
-      DiscoveryBackendController.new,
-    );
-
-/// Local-network permission service.
-final lanPermissionServiceProvider = Provider<LanPermissionService>(
-  (Ref ref) => const LanPermissionService(),
-);
-
-/// Discovery service bound to the selected backend.
-final lanDiscoveryServiceProvider = Provider<LanDiscoveryService>((Ref ref) {
-  final DiscoveryBackend backend = ref.watch(discoveryBackendProvider);
-  final LanDiscoveryService service = switch (backend) {
-    DiscoveryBackend.bonsoir => BonsoirDiscoveryService(),
-    DiscoveryBackend.nsd => NsdDiscoveryService(),
-  };
-  ref.onDispose(service.dispose);
-  return service;
-});
-
-/// Advertiser bound to the selected backend.
-final lanAdvertiserServiceProvider = Provider<LanAdvertiserService>((Ref ref) {
-  final DiscoveryBackend backend = ref.watch(discoveryBackendProvider);
-  final LanAdvertiserService service = switch (backend) {
-    DiscoveryBackend.bonsoir => BonsoirAdvertiserService(),
-    DiscoveryBackend.nsd => NsdAdvertiserService(),
-  };
-  ref.onDispose(() => unawaited(service.stop()));
-  return service;
-});
-
-/// The TCP listener owned by the Host.
-final tcpHostServiceProvider = Provider<TcpHostService>((Ref ref) {
-  final TcpHostService service = TcpHostService();
-  ref.onDispose(() => unawaited(service.dispose()));
-  return service;
-});
 
 /// Drives the Phase 0 LAN proof of concept.
 ///

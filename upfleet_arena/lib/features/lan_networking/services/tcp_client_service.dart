@@ -12,10 +12,11 @@ import 'frame_codec.dart';
 class TcpClientService {
   Socket? _socket;
   final FrameDecoder _decoder = FrameDecoder();
+  // Single subscription on purpose: the controllers buffer frames that
+  // arrive before the caller subscribes.
   final StreamController<ProtocolMessage> _frames =
-      StreamController<ProtocolMessage>.broadcast();
-  final StreamController<ProtocolError> _errors =
-      StreamController<ProtocolError>.broadcast();
+      StreamController<ProtocolMessage>();
+  final StreamController<ProtocolError> _errors = StreamController<ProtocolError>();
   bool _closed = false;
 
   /// Frames received from the Host.
