@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../../../game_engine/placement/placement.dart';
+import '../../../shared/models/match_models.dart';
 import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
 import '../../../shared/protocol/protocol_constants.dart';
@@ -84,6 +85,11 @@ class RoomClientSession {
       StreamController<PlacementState>.broadcast();
   final StreamController<ReadinessState> _readinessStates =
       StreamController<ReadinessState>.broadcast();
+  final StreamController<int> _countdowns = StreamController<int>.broadcast();
+  final StreamController<MatchStartState> _matchStarts =
+      StreamController<MatchStartState>.broadcast();
+  final StreamController<String> _placementCancellations =
+      StreamController<String>.broadcast();
 
   StreamSubscription<ProtocolMessage>? _frameSubscription;
   StreamSubscription<ProtocolError>? _errorSubscription;
@@ -119,6 +125,18 @@ class RoomClientSession {
 
   /// The readiness of every member.
   Stream<ReadinessState> get readinessStates => _readinessStates.stream;
+
+  /// The seconds that are left before the preparation ends.
+  ///
+  /// The Host owns the deadline and resends the remaining time with every
+  /// heartbeat, so a client only renders it (PLAN.md §9.4).
+  Stream<int> get countdowns => _countdowns.stream;
+
+  /// The match that just started.
+  Stream<MatchStartState> get matchStarts => _matchStarts.stream;
+
+  /// The reasons the preparation was cancelled.
+  Stream<String> get placementCancellations => _placementCancellations.stream;
 
   /// Connects to the Host and performs the join handshake.
   ///
@@ -213,6 +231,18 @@ class RoomClientSession {
         _placementStates.add(PlacementState.fromJson(message.payload));
       case HostEventType.placementReadyState:
         _readinessStates.add(ReadinessState.fromJson(message.payload));
+      case HostEventType.placementStarted:
+        _countdowns.add(message.payload['remainingSeconds'] as int? ?? 0);
+      case HostEventType.placementCancelled:
+        _placementCancellations.add(
+          message.payload['reason'] as String? ??
+              'The preparation was cancelled.',
+        );
+      case HostEventType.started:
+        _matchStarts.add(MatchStartState.fromJson(message.payload));
+      case HostEventType.heartbeat:
+        final Object? remaining = message.payload['placementRemainingSeconds'];
+        if (remaining is int) _countdowns.add(remaining);
       case HostEventType.closed:
         _events.add(
           RoomClosedEvent(
@@ -290,6 +320,14 @@ class RoomClientSession {
     );
   }
 
+  /// Asks the Host to start the preparation phase.
+  void startPlacement() {
+    if (!isConnected) return;
+    _transport.send(
+      ProtocolMessage(messageType: ClientMessageType.startPlacement),
+    );
+  }
+
   /// Sends a heartbeat to the Host.
   void sendHeartbeat() {
     if (!isConnected) return;
@@ -338,6 +376,9 @@ class RoomClientSession {
     await _events.close();
     await _placementStates.close();
     await _readinessStates.close();
+    await _countdowns.close();
+    await _matchStarts.close();
+    await _placementCancellations.close();
   }
 }
 

@@ -5,6 +5,7 @@ import '../features/home/presentation/home_screen.dart';
 import '../features/lan_lab/presentation/lan_lab_screen.dart';
 import '../features/lobby/presentation/host_settings_screen.dart';
 import '../features/lobby/presentation/lobby_screen.dart';
+import '../features/match/presentation/match_screen.dart';
 import '../features/placement/presentation/placement_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/rooms/presentation/create_room_screen.dart';
@@ -63,6 +64,12 @@ class AppRouter {
         name: 'placement',
         builder: (BuildContext context, GoRouterState state) =>
             const PlacementScreen(),
+      ),
+      GoRoute(
+        path: '/match',
+        name: 'match',
+        builder: (BuildContext context, GoRouterState state) =>
+            const MatchScreen(),
       ),
       GoRoute(
         path: '/lan-lab',

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../game_engine/placement/placement.dart';
 import '../../../host_runtime/host_room_service.dart';
 import '../../../host_runtime/room_coordinator.dart';
+import '../../../shared/models/match_models.dart';
 import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
 import '../../../shared/protocol/protocol_constants.dart';
@@ -63,6 +64,9 @@ class RoomSessionState {
     this.placement,
     this.readiness,
     this.placementError,
+    this.countdown,
+    this.match,
+    this.notice,
   });
 
   /// Whether this device hosts, joined, or is outside a room.
@@ -107,6 +111,15 @@ class RoomSessionState {
   /// the layout was not accepted.
   final String? placementError;
 
+  /// The preparation countdown, as the Host last reported it.
+  final PlacementCountdown? countdown;
+
+  /// The match that started, once the preparation ended.
+  final MatchStartState? match;
+
+  /// A message the Host sent to this player.
+  final String? notice;
+
   /// Whether this device hosts the room.
   bool get isHost => role == RoomRole.host;
 
@@ -134,6 +147,9 @@ class RoomSessionState {
     Object? placement = _unset,
     Object? readiness = _unset,
     Object? placementError = _unset,
+    Object? countdown = _unset,
+    Object? match = _unset,
+    Object? notice = _unset,
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
@@ -151,6 +167,11 @@ class RoomSessionState {
     placementError: identical(placementError, _unset)
         ? this.placementError
         : placementError as String?,
+    countdown: identical(countdown, _unset)
+        ? this.countdown
+        : countdown as PlacementCountdown?,
+    match: identical(match, _unset) ? this.match : match as MatchStartState?,
+    notice: identical(notice, _unset) ? this.notice : notice as String?,
   );
 
   static const Object _unset = Object();
@@ -170,11 +191,29 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   StreamSubscription<ReadinessState>? _hostReadinessSubscription;
   StreamSubscription<PlacementState>? _clientPlacementSubscription;
   StreamSubscription<ReadinessState>? _clientReadinessSubscription;
+  StreamSubscription<int>? _hostCountdownSubscription;
+  StreamSubscription<int>? _clientCountdownSubscription;
+  StreamSubscription<MatchStartState>? _hostMatchSubscription;
+  StreamSubscription<MatchStartState>? _clientMatchSubscription;
+  StreamSubscription<String>? _hostNoticeSubscription;
+  StreamSubscription<String>? _clientNoticeSubscription;
+  AppLifecycleListener? _lifecycleListener;
 
   @override
   RoomSessionState build() {
     ref.onDispose(_dispose);
+    // A Host that was suspended may have missed its deadline. The Host
+    // applies the transition as soon as it comes back (PLAN.md §9.4).
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () => unawaited(_applyDeadlineOnResume()),
+    );
     return const RoomSessionState();
+  }
+
+  Future<void> _applyDeadlineOnResume() async {
+    final HostRoomService? service = _hostService;
+    if (service == null) return;
+    await service.coordinator.checkPreparationDeadline();
   }
 
   // ----------------------------------------------------------------- host
@@ -238,6 +277,29 @@ class RoomSessionController extends Notifier<RoomSessionState> {
           .listen((ReadinessState readiness) {
             state = state.copyWith(readiness: readiness);
           });
+
+      _hostCountdownSubscription = service.coordinator.hostCountdowns.listen(
+        (int remaining) {
+          state = state.copyWith(
+            countdown: PlacementCountdown(
+              remainingSeconds: remaining,
+              syncedAt: DateTime.now(),
+            ),
+          );
+        },
+      );
+
+      _hostMatchSubscription = service.coordinator.hostMatchStarts.listen(
+        (MatchStartState match) {
+          state = state.copyWith(match: match, countdown: null);
+        },
+      );
+
+      _hostNoticeSubscription = service.coordinator.hostNotices.listen(
+        (String notice) {
+          state = state.copyWith(notice: notice);
+        },
+      );
 
       state = state.copyWith(
         status: RoomSessionStatus.inRoom,
@@ -304,6 +366,18 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       return service.coordinator.hostSetReady();
     }
     _clientSession?.setReady();
+    return const <String>[];
+  }
+
+  /// Starts the preparation phase. Host only.
+  ///
+  /// Returns the validation problems, or an empty list on success.
+  Future<List<String>> startPlacement() async {
+    final HostRoomService? service = _hostService;
+    if (service != null) {
+      return service.coordinator.hostStartPlacement();
+    }
+    _clientSession?.startPlacement();
     return const <String>[];
   }
 
@@ -411,6 +485,24 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         state = state.copyWith(readiness: readiness);
       },
     );
+    _clientCountdownSubscription = session.countdowns.listen((int remaining) {
+      state = state.copyWith(
+        countdown: PlacementCountdown(
+          remainingSeconds: remaining,
+          syncedAt: DateTime.now(),
+        ),
+      );
+    });
+    _clientMatchSubscription = session.matchStarts.listen(
+      (MatchStartState match) {
+        state = state.copyWith(match: match, countdown: null);
+      },
+    );
+    _clientNoticeSubscription = session.placementCancellations.listen(
+      (String notice) {
+        state = state.copyWith(notice: notice, countdown: null);
+      },
+    );
     _eventSubscription = session.events.listen((RoomClientEvent event) {
       switch (event) {
         case RoomJoinedEvent(:final String roomId):
@@ -509,6 +601,18 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _clientPlacementSubscription = null;
     await _clientReadinessSubscription?.cancel();
     _clientReadinessSubscription = null;
+    await _hostCountdownSubscription?.cancel();
+    _hostCountdownSubscription = null;
+    await _clientCountdownSubscription?.cancel();
+    _clientCountdownSubscription = null;
+    await _hostMatchSubscription?.cancel();
+    _hostMatchSubscription = null;
+    await _clientMatchSubscription?.cancel();
+    _clientMatchSubscription = null;
+    await _hostNoticeSubscription?.cancel();
+    _hostNoticeSubscription = null;
+    await _clientNoticeSubscription?.cancel();
+    _clientNoticeSubscription = null;
 
     final HostRoomService? service = _hostService;
     _hostService = null;
@@ -520,6 +624,8 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   }
 
   void _dispose() {
+    _lifecycleListener?.dispose();
+    _lifecycleListener = null;
     unawaited(_teardown());
   }
 

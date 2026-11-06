@@ -90,18 +90,23 @@ class HostRoomService implements RoomTransport {
   /// Tells every client that the Host is still alive.
   ///
   /// Clients use this to detect an abrupt Host loss. It carries the current
-  /// state version so a client can notice a missed change (PLAN.md §9.5).
+  /// state version so a client can notice a missed change, and the seconds
+  /// that are left before the preparation ends, so a countdown stays in sync
+  /// (PLAN.md §9.4, §9.5).
   Future<void> _broadcastHeartbeat() async {
     final HostRoomState? room = coordinator.state;
     if (room == null) return;
+    final int? remaining = coordinator.placementRemainingSeconds;
     for (final ClientSession session
         in coordinator.registry.admittedSessions.toList()) {
       await send(
         session.connectionId,
         ProtocolMessage(
           messageType: HostEventType.heartbeat,
-          payload: <String, dynamic>{'stateVersion': room.stateVersion},
-        ),
+          payload: <String, dynamic>{
+            'stateVersion': room.stateVersion,
+            'placementRemainingSeconds': ?remaining,
+          },        ),
       );
     }
   }

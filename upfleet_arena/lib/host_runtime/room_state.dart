@@ -87,6 +87,31 @@ class HostPlayerPlacement {
   bool ready = false;
 }
 
+/// The Host-side state of the running match.
+class HostMatchState {
+  HostMatchState({
+    required this.matchId,
+    required this.turnOrder,
+    required this.activePlayerId,
+    required this.startedAt,
+  });
+
+  /// The identifier of the match.
+  final String matchId;
+
+  /// The player identifiers in the order they take their turns.
+  final List<String> turnOrder;
+
+  /// The player who takes the current turn.
+  String activePlayerId;
+
+  /// When the match started.
+  final DateTime startedAt;
+
+  /// The number of the current turn.
+  int turnNumber = 1;
+}
+
 /// The Host-side authoritative room state.
 ///
 /// It lives in Host memory only and disappears when the Host process ends
@@ -134,6 +159,15 @@ class HostRoomState {
 
   /// Current lifecycle phase.
   RoomStatus status;
+
+  /// When the preparation phase ends.
+  ///
+  /// Only the Host owns this deadline. It is set while the room is in the
+  /// placement phase (PLAN.md §2.5, §9.4).
+  DateTime? placementDeadline;
+
+  /// The running match, once the preparation ended.
+  HostMatchState? match;
 
   /// Monotonic state version, incremented on every accepted change.
   int stateVersion;

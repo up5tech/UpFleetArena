@@ -39,6 +39,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final RoomSnapshot? snapshot = session.snapshot;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lobby'),
@@ -54,6 +56,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             if (session.errorMessage != null &&
                 session.status == RoomSessionStatus.closed) ...<Widget>[
               _ClosedBanner(message: session.errorMessage!),
+              const SizedBox(height: 12),
+            ],
+            if (session.notice != null) ...<Widget>[
+              _NoticeCard(message: session.notice!),
               const SizedBox(height: 12),
             ],
             if (session.isHost) ...<Widget>[
@@ -121,6 +127,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
             const SizedBox(height: 12),
             if (session.isHost)
               _HostActions(
+                canStart:
+                    snapshot?.status == RoomStatus.lobby &&
+                    _connectedCount(snapshot) >= RoomConfig.minimumPlayers,
+                onStart: () => _startPlacement(context),
                 onClose: () => _closeRoom(context),
               )
             else
@@ -148,6 +158,39 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// The number of members that are connected right now.
+  static int _connectedCount(RoomSnapshot? snapshot) {
+    if (snapshot == null) return 0;
+    return snapshot.players
+        .where(
+          (PlayerSummary player) =>
+              player.status == PlayerConnectionStatus.connected,
+        )
+        .length;
+  }
+
+  /// Follows the phase the Host moved the room into.
+  void _followPhase(RoomSessionState session) {
+    if (!mounted) return;
+    final RoomStatus? status = session.snapshot?.status;
+    if (status == RoomStatus.active) {
+      context.go('/match');
+    } else if (status == RoomStatus.placement) {
+      context.go('/placement');
+    }
+  }
+
+  Future<void> _startPlacement(BuildContext context) async {
+    final List<String> problems = await ref
+        .read(roomSessionControllerProvider.notifier)
+        .startPlacement();
+    if (!context.mounted) return;
+    if (problems.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(problems.join(' '))),
     );
   }
 
@@ -447,6 +490,17 @@ class _PlayerRow extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (player.ready) ...<Widget>[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.check, size: 13, color: AppTheme.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Ready',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.accent,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -456,12 +510,6 @@ class _PlayerRow extends StatelessWidget {
             const Chip(
               label: Text('Host'),
               avatar: Icon(Icons.star, size: 16, color: AppTheme.sunk),
-              visualDensity: VisualDensity.compact,
-            ),
-          if (player.ready)
-            const Chip(
-              label: Text('Ready'),
-              avatar: Icon(Icons.check, size: 16, color: AppTheme.accent),
               visualDensity: VisualDensity.compact,
             ),
           if (canKick)
@@ -499,16 +547,72 @@ class _PlayerRow extends StatelessWidget {
 }
 
 class _HostActions extends StatelessWidget {
-  const _HostActions({required this.onClose});
+  const _HostActions({
+    required this.canStart,
+    required this.onStart,
+    required this.onClose,
+  });
 
+  final bool canStart;
+  final VoidCallback onStart;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: onClose,
-      icon: const Icon(Icons.power_settings_new),
-      label: const Text('End room'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        FilledButton.icon(
+          onPressed: canStart ? onStart : null,
+          icon: const Icon(Icons.timer_outlined),
+          label: const Text('Start the preparation'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: onClose,
+          style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger),
+          icon: const Icon(Icons.power_settings_new),
+          label: const Text('End room'),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'When the preparation time runs out, the host places the missing '
+          'ships automatically and the match starts.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.sunk.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.sunk.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Icon(Icons.info_outline, color: AppTheme.sunk, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppTheme.textPrimary, height: 1.35),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

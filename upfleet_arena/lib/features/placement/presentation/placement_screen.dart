@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import '../../../game_engine/board/board.dart';
 import '../../../game_engine/fleet/fleet_profile.dart';
 import '../../../game_engine/placement/placement.dart';
 import '../../../game_engine/placement/placement_validator.dart';
+import '../../../shared/models/match_models.dart';
 import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
 import '../../rooms/domain/room_session_controller.dart';
@@ -30,8 +33,38 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   final Map<String, ShipOrientation> _pendingOrientation =
       <String, ShipOrientation>{};
   final List<List<ShipPlacement>> _undoStack = <List<ShipPlacement>>[];
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
   RoomSessionState get _session => ref.read(roomSessionControllerProvider);
+
+  /// The seconds that are left before the preparation ends.
+  int? get _remaining {
+    final PlacementCountdown? countdown = _session.countdown;
+    if (countdown == null) return null;
+    return countdown.remainingAt(DateTime.now());
+  }
+
+  /// Follows the phase the Host moved the room into.
+  void _followPhase(RoomSessionState session) {
+    if (!mounted) return;
+    if (session.snapshot?.status == RoomStatus.active) {
+      context.go('/match');
+    }
+  }
 
   FleetProfile get _profile => FleetProfile.fromPreset(
     _session.snapshot?.config.fleetPreset ?? FleetPreset.standard,
@@ -101,6 +134,12 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final List<ShipPlacement> ships = _ships;
     final bool complete = isFleetComplete(profile, ships);
     final bool ready = session.isPlacementReady;
+    final int? remaining = _remaining;
+    // A confirmed fleet is locked for the rest of the preparation phase.
+    final bool locked =
+        snapshot.status == RoomStatus.placement && ready;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
 
     return Scaffold(
       appBar: AppBar(
@@ -114,6 +153,10 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: <Widget>[
+            if (remaining != null) ...<Widget>[
+              _CountdownCard(remaining: remaining),
+              const SizedBox(height: 12),
+            ],
             _BoardSection(
               rows: snapshot.config.rows,
               columns: snapshot.config.columns,
@@ -134,6 +177,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               profile: profile,
               ships: ships,
               selectedShipId: _selectedShipId,
+              enabled: !locked,
               onSelect: _selectShip,
             ),
             const SizedBox(height: 12),
@@ -141,7 +185,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               children: <Widget>[
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _selectedShipId == null ? null : _rotate,
+                    onPressed: _selectedShipId == null || locked
+                        ? null
+                        : _rotate,
                     icon: const Icon(Icons.rotate_right, size: 18),
                     label: const Text('Rotate'),
                   ),
@@ -157,7 +203,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _autoPlace,
+                    onPressed: locked ? null : _autoPlace,
                     icon: const Icon(Icons.auto_awesome, size: 18),
                     label: const Text('Auto'),
                   ),
@@ -386,12 +432,14 @@ class _ShipInventory extends StatelessWidget {
     required this.profile,
     required this.ships,
     required this.selectedShipId,
+    required this.enabled,
     required this.onSelect,
   });
 
   final FleetProfile profile;
   final List<ShipPlacement> ships;
   final String? selectedShipId;
+  final bool enabled;
   final ValueChanged<String> onSelect;
 
   @override
@@ -410,7 +458,7 @@ class _ShipInventory extends StatelessWidget {
             length: profile.lengthOf(shipId) ?? 0,
             placed: placed.contains(shipId),
             selected: selectedShipId == shipId,
-            onTap: () => onSelect(shipId),
+            onTap: enabled ? () => onSelect(shipId) : null,
           ),
       ],
     );
@@ -430,7 +478,7 @@ class _ShipChip extends StatelessWidget {
   final int length;
   final bool placed;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -461,6 +509,51 @@ class _ShipChip extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
                 fontWeight: selected ? FontWeight.w600 : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CountdownCard extends StatelessWidget {
+  const _CountdownCard({required this.remaining});
+
+  final int remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    final int minutes = remaining ~/ 60;
+    final int seconds = remaining % 60;
+    final String clock =
+        '$minutes:${seconds.toString().padLeft(2, '0')}';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.timer_outlined, color: AppTheme.sunk, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'The preparation ends in $clock',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'A fleet that is not finished in time is placed '
+                    'automatically.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      height: 1.35,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

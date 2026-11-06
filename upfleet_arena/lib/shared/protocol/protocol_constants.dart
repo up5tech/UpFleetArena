@@ -74,6 +74,10 @@ class ProtocolErrorCode {
   static const String alreadyJoined = 'ALREADY_JOINED';
   static const String playerNotFound = 'PLAYER_NOT_FOUND';
   static const String notRoomMember = 'NOT_ROOM_MEMBER';
+
+  // Preparation-phase codes added in Phase 4.
+  static const String notEnoughPlayers = 'NOT_ENOUGH_PLAYERS';
+  static const String placementLocked = 'PLACEMENT_LOCKED';
 }
 
 /// Client-to-Host message types (PLAN.md §8.2).
@@ -109,6 +113,7 @@ class HostEventType {
   static const String configUpdated = 'room:config-updated';
   static const String closed = 'room:closed';
   static const String placementStarted = 'placement:started';
+  static const String placementCancelled = 'placement:cancelled';
   static const String placementState = 'placement:state';
   static const String placementReadyState = 'placement:ready-state';
   static const String placementCompleted = 'placement:completed';

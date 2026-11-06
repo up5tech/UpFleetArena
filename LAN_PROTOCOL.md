@@ -170,6 +170,7 @@ Phase 0 additionally defines `client:ping` as a transport probe, answered with
 | `room:config-updated` | New Host settings |
 | `room:closed` | Host explicitly closed the room or ended the match. Also sent to a single client that was removed from the room, with `reason: "kicked"` |
 | `placement:started` | Placement deadline and fleet profile |
+| `placement:cancelled` | The preparation was cancelled; the room returns to the lobby |
 | `placement:state` | The exact fleet layout, sent to its owner only |
 | `placement:ready-state` | Public readiness projection |
 | `placement:completed` | Placement phase ended; match is starting |
@@ -233,6 +234,13 @@ new situation gets a new code.
 | `ALREADY_JOINED` | The connection already completed the join handshake |
 | `PLAYER_NOT_FOUND` | The targeted player is no longer in the room |
 | `NOT_ROOM_MEMBER` | The sender is not a member of the room |
+
+Preparation-phase codes added in Phase 4.
+
+| Code | Meaning |
+|---|---|
+| `NOT_ENOUGH_PLAYERS` | Fewer than two connected players are needed to start the preparation |
+| `PLACEMENT_LOCKED` | The fleet is confirmed and can no longer be changed |
 
 A `protocol:error` never carries stack traces, local file paths, raw exception
 text or private fleet data.
@@ -492,6 +500,112 @@ coordinates:
 
 A new board size or a new fleet preset invalidates every stored layout: the
 Host clears the layouts and the confirmations.
+
+## 8.5 The preparation phase
+
+The Host owns the preparation deadline. A client never computes it and never
+sends a remaining time (PLAN.md §9.4).
+
+### `room:start-placement`
+
+The Host moves the room from the lobby into the preparation phase. The Host
+validates the command in this order:
+
+1. the sender is the Host → `HOST_ONLY_ACTION`
+2. the room is still in the lobby → `ROOM_ALREADY_STARTED`
+3. at least two players are connected and the settings are valid →
+   `NOT_ENOUGH_PLAYERS`
+
+The Host then sets the deadline to now plus the configured preparation
+duration and answers with `placement:started`:
+
+```json
+{
+  "messageType": "placement:started",
+  "payload": {
+    "remainingSeconds": 120,
+    "durationSeconds": 120,
+    "fleetPreset": "STANDARD",
+    "boardRows": 10,
+    "boardColumns": 10,
+    "stateVersion": 14
+  }
+}
+```
+
+### The countdown
+
+The `host:heartbeat` event carries the seconds that are left:
+
+```json
+{
+  "messageType": "host:heartbeat",
+  "payload": {
+    "stateVersion": 17,
+    "placementRemainingSeconds": 42
+  }
+}
+```
+
+The field is missing while no preparation is running. A client counts down
+locally from the last value it received and corrects itself with every
+heartbeat; the countdown is display-only.
+
+### The end of the preparation
+
+The preparation ends in one of three ways, and only the Host decides which one
+it is:
+
+| Trigger | Result |
+|---|---|
+| Every connected player confirmed a fleet | The match starts at once |
+| The deadline passes | The Host completes the missing fleets and starts the match |
+| Fewer than two players are left | The preparation is cancelled and the room returns to the lobby |
+
+The automatic completion uses the same engine as the *Auto Place* button, so
+it always produces a legal fleet. If it cannot, the preparation is cancelled
+with a controlled error instead of starting a broken match.
+
+A confirmed fleet is locked: it can no longer be changed during the
+preparation. The command is rejected with `PLACEMENT_LOCKED`.
+
+### `game:started`
+
+The match starts with a randomized turn order:
+
+```json
+{
+  "messageType": "game:started",
+  "payload": {
+    "matchId": "match-uuid",
+    "turnOrder": [
+      { "playerId": "player-uuid", "displayName": "Alice" }
+    ],
+    "activePlayerId": "player-uuid",
+    "boardRows": 10,
+    "boardColumns": 10,
+    "fleetPreset": "STANDARD",
+    "stateVersion": 21
+  }
+}
+```
+
+The first player of the order takes the first turn. The turn order holds
+every player of the room exactly once.
+
+### `placement:cancelled`
+
+The preparation was cancelled and the room returned to the lobby:
+
+```json
+{
+  "messageType": "placement:cancelled",
+  "payload": {
+    "reason": "Not enough players are left to start the match.",
+    "stateVersion": 18
+  }
+}
+```
 
 ## 9. Heartbeats and host loss
 

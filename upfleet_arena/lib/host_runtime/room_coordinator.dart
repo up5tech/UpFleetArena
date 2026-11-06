@@ -10,6 +10,7 @@ import '../game_engine/fleet/fleet_profile.dart';
 import '../game_engine/placement/auto_placement.dart';
 import '../game_engine/placement/placement.dart';
 import '../game_engine/placement/placement_validator.dart';
+import '../shared/models/match_models.dart';
 import '../shared/models/placement_models.dart';
 import '../shared/models/room_models.dart';
 import '../shared/protocol/protocol_constants.dart';
@@ -32,10 +33,15 @@ class RoomCoordinator {
   RoomCoordinator({
     ClientConnectionRegistry? registry,
     this.projections = const ProjectionBuilder(),
-  }) : registry = registry ?? ClientConnectionRegistry();
+    DateTime Function()? clock,
+  }) : registry = registry ?? ClientConnectionRegistry(),
+       _clock = clock ?? DateTime.now;
 
   /// The connections this coordinator tracks.
   final ClientConnectionRegistry registry;
+
+  /// The time source of the preparation deadline.
+  final DateTime Function() _clock;
 
   /// Builds the per-recipient views of the room.
   final ProjectionBuilder projections;
@@ -45,6 +51,14 @@ class RoomCoordinator {
       StreamController<PlacementState>.broadcast();
   final StreamController<ReadinessState> _hostReadinessStates =
       StreamController<ReadinessState>.broadcast();
+  final StreamController<int> _hostCountdowns =
+      StreamController<int>.broadcast();
+  final StreamController<MatchStartState> _hostMatchStarts =
+      StreamController<MatchStartState>.broadcast();
+  final StreamController<String> _hostNotices =
+      StreamController<String>.broadcast();
+
+  Timer? _placementTimer;
 
   HostRoomState? _state;
   RoomTransport? _transport;
@@ -71,6 +85,30 @@ class RoomCoordinator {
   /// The readiness of every member, as everybody may see it.
   Stream<ReadinessState> get hostReadinessStates =>
       _hostReadinessStates.stream;
+
+  /// The seconds that are left before the preparation ends.
+  Stream<int> get hostCountdowns => _hostCountdowns.stream;
+
+  /// The match that just started.
+  Stream<MatchStartState> get hostMatchStarts => _hostMatchStarts.stream;
+
+  /// Messages the Host shows to its own player.
+  Stream<String> get hostNotices => _hostNotices.stream;
+
+  /// The seconds that are left before the preparation ends.
+  ///
+  /// Returns `null` when no preparation is running. The Host owns the
+  /// deadline; a client never computes it (PLAN.md §9.4).
+  int? get placementRemainingSeconds {
+    final HostRoomState? room = _state;
+    final DateTime? deadline = room?.placementDeadline;
+    if (room == null || deadline == null) return null;
+    final int left = deadline.difference(_now()).inSeconds;
+    return left < 0 ? 0 : left;
+  }
+
+  /// The current time of the Host.
+  DateTime _now() => _clock();
 
   /// Connects the coordinator to a transport.
   ///
@@ -150,6 +188,8 @@ class RoomCoordinator {
         await _handlePlacementAuto(session, message);
       case ClientMessageType.placementReady:
         await _handlePlacementReady(session, message);
+      case ClientMessageType.startPlacement:
+        await _handleStartPlacement(session, message);
       case ClientMessageType.requestSnapshot:
         await _handleSnapshotRequest(session, message);
       case ClientMessageType.heartbeat:
@@ -208,7 +248,7 @@ class RoomCoordinator {
         session,
         message,
         ProtocolErrorCode.roomAlreadyStarted,
-        'The match has already started.',
+        'The room no longer accepts new players.',
       );
       return;
     }
@@ -316,6 +356,7 @@ class RoomCoordinator {
 
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    await _checkPreparationCancellation(room);
     _emitHostSnapshot();
     await _transport?.closeConnection(session.connectionId);
   }
@@ -356,6 +397,7 @@ class RoomCoordinator {
 
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    await _checkPreparationCancellation(room);
     _emitHostSnapshot();
   }
 
@@ -418,6 +460,7 @@ class RoomCoordinator {
 
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    await _checkPreparationCancellation(room);
     _emitHostSnapshot();
   }
 
@@ -455,7 +498,9 @@ class RoomCoordinator {
     final HostRoomState? room = _state;
     if (room == null) return;
 
+    _stopPlacementTimer();
     room.status = RoomStatus.closed;
+    room.placementDeadline = null;
     room.stateVersion++;
 
     for (final ClientSession session in registry.admittedSessions.toList()) {
@@ -658,9 +703,15 @@ class RoomCoordinator {
   Future<List<String>> hostSetPlacement(List<ShipPlacement> ships) async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
-    if (room.status != RoomStatus.lobby) {
+    if (!_acceptsPlacements(room)) {
       return <String>['The fleets cannot be changed any more.'];
     }
+
+    final List<String> lockProblems = _layoutLockProblems(
+      room,
+      room.hostPlayerId,
+    );
+    if (lockProblems.isNotEmpty) return lockProblems;
 
     final PlacementError? error = validateFleetLayout(
       board: _board(room),
@@ -677,7 +728,7 @@ class RoomCoordinator {
   Future<List<String>> hostAutoPlace() async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
-    if (room.status != RoomStatus.lobby) {
+    if (!_acceptsPlacements(room)) {
       return <String>['The fleets cannot be changed any more.'];
     }
     await _autoPlace(room, room.hostPlayerId);
@@ -708,7 +759,7 @@ class RoomCoordinator {
       );
       return;
     }
-    if (room.status != RoomStatus.lobby) {
+    if (!_acceptsPlacements(room)) {
       await _sendError(
         session,
         message,
@@ -725,6 +776,17 @@ class RoomCoordinator {
         message,
         ProtocolErrorCode.invalidShipPlacement,
         'The fleet layout was malformed.',
+      );
+      return;
+    }
+
+    final List<String> lockProblems = _layoutLockProblems(room, playerId);
+    if (lockProblems.isNotEmpty) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.placementLocked,
+        lockProblems.join(' '),
       );
       return;
     }
@@ -781,7 +843,7 @@ class RoomCoordinator {
       );
       return;
     }
-    if (room.status != RoomStatus.lobby) {
+    if (!_acceptsPlacements(room)) {
       await _sendError(
         session,
         message,
@@ -811,7 +873,7 @@ class RoomCoordinator {
       );
       return;
     }
-    if (room.status != RoomStatus.lobby) {
+    if (!_acceptsPlacements(room)) {
       await _sendError(
         session,
         message,
@@ -857,6 +919,24 @@ class RoomCoordinator {
     if (wasReady) await _broadcastReadiness(room);
   }
 
+  /// Whether the room still accepts fleet layouts.
+  ///
+  /// The lobby accepts them and so does the preparation phase: a player who
+  /// did not confirm a fleet may still place one until the deadline
+  /// (PLAN.md §2.5).
+  bool _acceptsPlacements(HostRoomState room) =>
+      room.status == RoomStatus.lobby || room.status == RoomStatus.placement;
+
+  /// The reasons a player may not change the fleet any more.
+  ///
+  /// A confirmed fleet is locked for the rest of the preparation phase
+  /// (PLAN.md §2.5).
+  List<String> _layoutLockProblems(HostRoomState room, String playerId) {
+    if (room.status != RoomStatus.placement) return const <String>[];
+    if (!placementFor(playerId).ready) return const <String>[];
+    return <String>['Your fleet is confirmed and can no longer be changed.'];
+  }
+
   /// Places the fleet of a member automatically.
   Future<void> _autoPlace(HostRoomState room, String playerId) async {
     final List<ShipPlacement> ships = autoPlaceFleet(
@@ -890,7 +970,26 @@ class RoomCoordinator {
     room.stateVersion++;
     await _sendPlacementState(room, playerId);
     await _broadcastReadiness(room);
+
+    // The match starts as soon as every player confirmed a fleet.
+    if (room.status == RoomStatus.placement && _everyoneReady(room)) {
+      await _startMatch(room);
+    }
     return const <String>[];
+  }
+
+  /// Whether every connected player confirmed a complete fleet.
+  bool _everyoneReady(HostRoomState room) {
+    final List<HostPlayer> players = room.orderedPlayers
+        .where(
+          (HostPlayer player) =>
+              player.status == PlayerConnectionStatus.connected,
+        )
+        .toList();
+    if (players.length < RoomConfig.minimumPlayers) return false;
+    return players.every(
+      (HostPlayer player) => placementFor(player.playerId).ready,
+    );
   }
 
   /// Sends the exact fleet layout to its owner only.
@@ -1038,6 +1137,309 @@ class RoomCoordinator {
     _hostReadinessStates.add(_readinessState(room));
   }
 
+  void _emitHostCountdown(int remainingSeconds) {
+    if (_hostCountdowns.isClosed) return;
+    _hostCountdowns.add(remainingSeconds);
+  }
+
+  void _emitHostMatchStart(MatchStartState state) {
+    if (_hostMatchStarts.isClosed) return;
+    _hostMatchStarts.add(state);
+  }
+
+  void _emitHostNotice(String notice) {
+    if (_hostNotices.isClosed) return;
+    _hostNotices.add(notice);
+  }
+
+  // ------------------------------------------------------- preparation
+
+  /// Starts the preparation phase as the Host device.
+  ///
+  /// Returns the validation problems, or an empty list on success.
+  Future<List<String>> hostStartPlacement() async {
+    final HostRoomState? room = _state;
+    if (room == null) return const <String>[];
+    if (room.status != RoomStatus.lobby) {
+      return <String>['The preparation has already started.'];
+    }
+
+    final List<String> problems = _preparationProblems(room);
+    if (problems.isNotEmpty) return problems;
+
+    await _startPreparation(room);
+    return const <String>[];
+  }
+
+  Future<void> _handleStartPlacement(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+
+    if (session.playerId != room.hostPlayerId) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.hostOnlyAction,
+        'Only the host can start the preparation.',
+      );
+      return;
+    }
+    if (room.status != RoomStatus.lobby) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.roomAlreadyStarted,
+        'The preparation has already started.',
+      );
+      return;
+    }
+
+    final List<String> problems = _preparationProblems(room);
+    if (problems.isNotEmpty) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.notEnoughPlayers,
+        problems.join(' '),
+      );
+      return;
+    }
+
+    await _startPreparation(room);
+  }
+
+  /// The reasons the preparation cannot start yet.
+  List<String> _preparationProblems(HostRoomState room) {
+    final List<String> problems = <String>[];
+    final int connected = room.players.values
+        .where(
+          (HostPlayer player) =>
+              player.status == PlayerConnectionStatus.connected,
+        )
+        .length;
+    if (connected < RoomConfig.minimumPlayers) {
+      problems.add(
+        'At least ${RoomConfig.minimumPlayers} connected players are needed '
+        'to start the preparation.',
+      );
+    }
+    problems.addAll(room.config.validate());
+    return problems;
+  }
+
+  /// Moves the room into the preparation phase and starts the deadline.
+  Future<void> _startPreparation(HostRoomState room) async {
+    room.status = RoomStatus.placement;
+    room.placementDeadline = _now().add(
+      Duration(seconds: room.config.placementDurationSeconds),
+    );
+    room.stateVersion++;
+
+    _placementTimer?.cancel();
+    _placementTimer = Timer.periodic(const Duration(seconds: 1), (Timer _) {
+      unawaited(checkPreparationDeadline());
+    });
+
+    await _broadcastRoomState(room);
+    await _broadcastPlacementStarted(room);
+    _emitHostCountdown(room.config.placementDurationSeconds);
+    _emitHostSnapshot();
+  }
+
+  /// The Host-owned deadline check.
+  ///
+  /// The Host calls this on its own timer and again after the app resumes,
+  /// so a preparation that ran out while the app was suspended still ends at
+  /// the right moment (PLAN.md §9.4).
+  Future<void> checkPreparationDeadline() async {
+    final HostRoomState? room = _state;
+    if (room == null || room.status != RoomStatus.placement) return;
+    final int? remaining = placementRemainingSeconds;
+    if (remaining == null) return;
+
+    _emitHostCountdown(remaining);
+    if (remaining > 0) return;
+
+    await _completePreparation(room);
+  }
+
+  /// Ends the preparation: the Host completes the fleets that are missing and
+  /// starts the match (PLAN.md §2.5).
+  Future<void> _completePreparation(HostRoomState room) async {
+    _stopPlacementTimer();
+    room.stateVersion++;
+
+    for (final HostPlayer player in room.orderedPlayers) {
+      if (!player.occupiesSeat) continue;
+      final HostPlayerPlacement placement = placementFor(player.playerId);
+      if (placement.ready && placement.ships.isNotEmpty) continue;
+
+      final List<ShipPlacement> ships = autoPlaceFleet(
+        board: _board(room),
+        profile: _profile(room),
+        random: Random(),
+      );
+      final PlacementError? error = validateFleetLayout(
+        board: _board(room),
+        profile: _profile(room),
+        ships: ships,
+      );
+      if (error != null) {
+        await _cancelPreparation(
+          room,
+          'The automatic fleet could not be placed. The preparation was '
+          'cancelled.',
+        );
+        return;
+      }
+
+      placement.ships
+        ..clear()
+        ..addEntries(
+          ships.map(
+            (ShipPlacement ship) =>
+                MapEntry<String, ShipPlacement>(ship.shipId, ship),
+          ),
+        );
+      placement.ready = true;
+      await _sendPlacementState(room, player.playerId);
+    }
+
+    await _broadcastReadiness(room);
+    await _startMatch(room);
+  }
+
+  /// Starts the match with a randomized turn order (PLAN.md §2.6).
+  Future<void> _startMatch(HostRoomState room) async {
+    final List<HostPlayer> players = room.orderedPlayers
+        .where((HostPlayer player) => player.occupiesSeat)
+        .toList();
+    if (players.length < RoomConfig.minimumPlayers) {
+      await _cancelPreparation(
+        room,
+        'Not enough players are left to start the match.',
+      );
+      return;
+    }
+
+    final List<HostPlayer> order = List<HostPlayer>.from(players)
+      ..shuffle(Random());
+    final String matchId = SecureRandom.uuidV4();
+
+    room.match = HostMatchState(
+      matchId: matchId,
+      turnOrder: order
+          .map((HostPlayer player) => player.playerId)
+          .toList(),
+      activePlayerId: order.first.playerId,
+      startedAt: DateTime.now(),
+    );
+    room.status = RoomStatus.active;
+    room.placementDeadline = null;
+    room.stateVersion++;
+
+    final MatchStartState state = MatchStartState(
+      matchId: matchId,
+      turnOrder: order
+          .map(
+            (HostPlayer player) => TurnOrderEntry(
+              playerId: player.playerId,
+              displayName: player.displayName,
+            ),
+          )
+          .toList(),
+      activePlayerId: order.first.playerId,
+      boardRows: room.config.rows,
+      boardColumns: room.config.columns,
+      fleetPreset: room.config.fleetPreset,
+      stateVersion: room.stateVersion,
+    );
+
+    await _broadcastRoomState(room);
+    await _broadcastMatchStarted(state);
+    _emitHostMatchStart(state);
+    _emitHostSnapshot();
+  }
+
+  /// Cancels the preparation and returns the room to the lobby.
+  Future<void> _cancelPreparation(HostRoomState room, String reason) async {
+    _stopPlacementTimer();
+    room.status = RoomStatus.lobby;
+    room.placementDeadline = null;
+    room.stateVersion++;
+
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.placementCancelled,
+          payload: <String, dynamic>{
+            'reason': reason,
+            'stateVersion': room.stateVersion,
+          },
+        ),
+      );
+    }
+    await _broadcastRoomState(room);
+    _emitHostNotice(reason);
+    _emitHostSnapshot();
+  }
+
+  /// Cancels the preparation when too few players are left.
+  Future<void> _checkPreparationCancellation(HostRoomState room) async {
+    if (room.status != RoomStatus.placement) return;
+    final int seated = room.seatedCount;
+    if (seated < RoomConfig.minimumPlayers) {
+      await _cancelPreparation(
+        room,
+        'Not enough players are left to start the match.',
+      );
+    }
+  }
+
+  void _stopPlacementTimer() {
+    _placementTimer?.cancel();
+    _placementTimer = null;
+  }
+
+  /// Tells every client that the preparation started.
+  Future<void> _broadcastPlacementStarted(HostRoomState room) async {
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'remainingSeconds': placementRemainingSeconds,
+      'durationSeconds': room.config.placementDurationSeconds,
+      'fleetPreset': room.config.fleetPreset.wire,
+      'boardRows': room.config.rows,
+      'boardColumns': room.config.columns,
+      'stateVersion': room.stateVersion,
+    };
+
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.placementStarted,
+          payload: payload,
+        ),
+      );
+    }
+  }
+
+  /// Tells every client that the match started.
+  Future<void> _broadcastMatchStarted(MatchStartState state) async {
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.started,
+          payload: state.toJson(),
+        ),
+      );
+    }
+  }
+
   Future<void> _sendError(
     ClientSession session,
     ProtocolMessage request,
@@ -1059,9 +1461,13 @@ class RoomCoordinator {
 
   /// Releases the resources held by the coordinator.
   Future<void> dispose() async {
+    _stopPlacementTimer();
     await _hostSnapshots.close();
     await _hostPlacementStates.close();
     await _hostReadinessStates.close();
+    await _hostCountdowns.close();
+    await _hostMatchStarts.close();
+    await _hostNotices.close();
     registry.clear();
     _state = null;
   }
