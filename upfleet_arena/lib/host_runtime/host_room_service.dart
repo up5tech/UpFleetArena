@@ -97,6 +97,7 @@ class HostRoomService implements RoomTransport {
     final HostRoomState? room = coordinator.state;
     if (room == null) return;
     final int? remaining = coordinator.placementRemainingSeconds;
+    final int? turnRemaining = coordinator.turnRemainingSeconds;
     for (final ClientSession session
         in coordinator.registry.admittedSessions.toList()) {
       await send(
@@ -106,7 +107,9 @@ class HostRoomService implements RoomTransport {
           payload: <String, dynamic>{
             'stateVersion': room.stateVersion,
             'placementRemainingSeconds': ?remaining,
-          },        ),
+            'turnRemainingSeconds': ?turnRemaining,
+          },
+        ),
       );
     }
   }

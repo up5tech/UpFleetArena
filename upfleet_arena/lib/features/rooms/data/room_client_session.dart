@@ -90,6 +90,14 @@ class RoomClientSession {
       StreamController<MatchStartState>.broadcast();
   final StreamController<String> _placementCancellations =
       StreamController<String>.broadcast();
+  final StreamController<MatchSnapshot> _matchSnapshots =
+      StreamController<MatchSnapshot>.broadcast();
+  final StreamController<ShotFeedback> _shotFeedbacks =
+      StreamController<ShotFeedback>.broadcast();
+  final StreamController<PublicActivity> _publicActivities =
+      StreamController<PublicActivity>.broadcast();
+  final StreamController<int> _turnCountdowns =
+      StreamController<int>.broadcast();
 
   StreamSubscription<ProtocolMessage>? _frameSubscription;
   StreamSubscription<ProtocolError>? _errorSubscription;
@@ -101,6 +109,9 @@ class RoomClientSession {
   String? _roomId;
   String? _resumeToken;
   bool _closed = false;
+  String? _pendingFireId;
+  Completer<List<String>>? _pendingFire;
+  int _fireSequence = 0;
 
   /// The player ID assigned by the Host.
   String? get playerId => _playerId;
@@ -137,6 +148,18 @@ class RoomClientSession {
 
   /// The reasons the preparation was cancelled.
   Stream<String> get placementCancellations => _placementCancellations.stream;
+
+  /// The permission-filtered state of the match.
+  Stream<MatchSnapshot> get matchSnapshots => _matchSnapshots.stream;
+
+  /// The result of a shot this client is involved in.
+  Stream<ShotFeedback> get shotFeedbacks => _shotFeedbacks.stream;
+
+  /// The shots of the other players, without any coordinate.
+  Stream<PublicActivity> get publicActivities => _publicActivities.stream;
+
+  /// The seconds that are left before the current turn ends.
+  Stream<int> get turnCountdowns => _turnCountdowns.stream;
 
   /// Connects to the Host and performs the join handshake.
   ///
@@ -221,12 +244,26 @@ class RoomClientSession {
         );
         _pendingJoin?.complete(playerId);
       case HostEventType.roomState:
-      case HostEventType.stateSnapshot:
       case HostEventType.configUpdated:
         final Object? rawSnapshot = message.payload['snapshot'];
         if (rawSnapshot is Map<String, dynamic>) {
           _snapshots.add(RoomSnapshot.fromJson(rawSnapshot));
         }
+      case HostEventType.stateSnapshot:
+        final Object? rawMatch = message.payload['snapshot'];
+        if (rawMatch is Map<String, dynamic>) {
+          _matchSnapshots.add(MatchSnapshot.fromJson(rawMatch));
+        }
+      case HostEventType.shotResult:
+        _shotFeedbacks.add(ShotFeedback.fromJson(message.payload));
+        if (message.requestId == _pendingFireId && _pendingFire?.isCompleted == false) {
+          _pendingFire!.complete(const <String>[]);
+        }
+      case HostEventType.publicActivity:
+        _publicActivities.add(PublicActivity.fromJson(message.payload));
+      case HostEventType.turnStarted:
+        final Object? remaining = message.payload['remainingSeconds'];
+        if (remaining is int) _turnCountdowns.add(remaining);
       case HostEventType.placementState:
         _placementStates.add(PlacementState.fromJson(message.payload));
       case HostEventType.placementReadyState:
@@ -243,6 +280,9 @@ class RoomClientSession {
       case HostEventType.heartbeat:
         final Object? remaining = message.payload['placementRemainingSeconds'];
         if (remaining is int) _countdowns.add(remaining);
+        final Object? turnRemaining =
+            message.payload['turnRemainingSeconds'];
+        if (turnRemaining is int) _turnCountdowns.add(turnRemaining);
       case HostEventType.closed:
         _events.add(
           RoomClosedEvent(
@@ -262,6 +302,11 @@ class RoomClientSession {
         final String code = message.payload['code'] as String? ?? 'UNKNOWN';
         final String text =
             message.payload['message'] as String? ?? 'Something went wrong.';
+        if (message.requestId == _pendingFireId && _pendingFire?.isCompleted == false) {
+          _pendingFire!.complete(<String>[text]);
+          requestSnapshot();
+          break;
+        }
         _events.add(RoomErrorEvent(code: code, message: text));
         if (_pendingJoin != null) {
           _pendingJoin!.completeError(RoomJoinException(code, text));
@@ -320,6 +365,64 @@ class RoomClientSession {
     );
   }
 
+  /// Fires at a cell of an opponent's board and waits for the Host to
+  /// confirm the shot.
+  ///
+  /// The answer arrives as `game:shot-result` carrying this request id, so a
+  /// client never has to guess whether its shot was accepted.
+  Future<List<String>> fire({
+    required String matchId,
+    required int turnNumber,
+    required int expectedStateVersion,
+    required String targetPlayerId,
+    required int row,
+    required int column,
+  }) async {
+    if (!isConnected) return <String>['The host is not connected.'];
+    if (_pendingFire != null) return <String>['A shot is awaiting confirmation.'];
+    final String requestId = 'fire-${++_fireSequence}';
+    final Completer<List<String>> pending = Completer<List<String>>();
+    _pendingFireId = requestId;
+    _pendingFire = pending;
+    try {
+      _transport.send(
+        ProtocolMessage(
+          messageType: ClientMessageType.fire,
+          roomId: _roomId,
+          requestId: requestId,
+          expectedStateVersion: expectedStateVersion,
+          payload: <String, dynamic>{
+            'matchId': matchId,
+            'turnNumber': turnNumber,
+            'targetPlayerId': targetPlayerId,
+            'row': row,
+            'column': column,
+          },
+        ),
+      );
+      return await pending.future.timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {
+          requestSnapshot();
+          return <String>[
+            'The host did not confirm the shot. The match state was refreshed.',
+          ];
+        },
+      );
+    } finally {
+      _pendingFire = null;
+      _pendingFireId = null;
+    }
+  }
+
+  /// Asks the Host for the current authorized state.
+  void requestSnapshot() {
+    if (!isConnected) return;
+    _transport.send(
+      ProtocolMessage(messageType: ClientMessageType.requestSnapshot),
+    );
+  }
+
   /// Asks the Host to start the preparation phase.
   void startPlacement() {
     if (!isConnected) return;
@@ -363,6 +466,9 @@ class RoomClientSession {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    if (_pendingFire?.isCompleted == false) {
+      _pendingFire!.complete(<String>['The connection to the host was closed.']);
+    }
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _watchdogTimer?.cancel();
@@ -379,6 +485,10 @@ class RoomClientSession {
     await _countdowns.close();
     await _matchStarts.close();
     await _placementCancellations.close();
+    await _matchSnapshots.close();
+    await _shotFeedbacks.close();
+    await _publicActivities.close();
+    await _turnCountdowns.close();
   }
 }
 

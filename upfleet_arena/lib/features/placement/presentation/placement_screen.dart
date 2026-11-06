@@ -13,7 +13,7 @@ import '../../../shared/models/match_models.dart';
 import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
 import '../../rooms/domain/room_session_controller.dart';
-import '../widgets/board_canvas.dart';
+import '../../../shared/widgets/board_canvas.dart';
 
 /// The screen where a player prepares their own fleet.
 ///
@@ -53,9 +53,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
 
   /// The seconds that are left before the preparation ends.
   int? get _remaining {
-    final PlacementCountdown? countdown = _session.countdown;
+    final Countdown? countdown = _session.countdown;
     if (countdown == null) return null;
-    return countdown.remainingAt(DateTime.now());
+    return countdown.remaining;
   }
 
   /// Follows the phase the Host moved the room into.

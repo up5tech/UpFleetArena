@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/placement/presentation/placement_screen.dart';
-import 'package:upfleet_arena/features/placement/widgets/board_canvas.dart';
+import 'package:upfleet_arena/shared/widgets/board_canvas.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
 import 'package:upfleet_arena/game_engine/placement/placement.dart';
 import 'package:upfleet_arena/shared/models/placement_models.dart';

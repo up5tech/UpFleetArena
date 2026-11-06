@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_theme.dart';
-import '../../../game_engine/board/board.dart';
-import '../../../game_engine/placement/placement.dart';
+import '../../app/theme/app_theme.dart';
+import '../../game_engine/board/board.dart';
+import '../../game_engine/placement/placement.dart';
 
 /// The board of a player.
 ///
@@ -17,6 +17,9 @@ class BoardCanvas extends StatelessWidget {
     required this.rows,
     required this.columns,
     required this.ships,
+    this.shots = const <CellCoord>[],
+    this.misses = const <CellCoord>[],
+    this.sunkShips = const <String>{},
     this.preview,
     this.previewIsValid = true,
     this.onCellPreview,
@@ -33,6 +36,15 @@ class BoardCanvas extends StatelessWidget {
 
   /// The ships that are already placed.
   final List<ShipPlacement> ships;
+
+  /// The cells that were hit on this board.
+  final List<CellCoord> shots;
+
+  /// The cells that were fired at without hitting a ship.
+  final List<CellCoord> misses;
+
+  /// The ships that were sunk: their hulls are drawn in the sunk colour.
+  final Set<String> sunkShips;
 
   /// The ship that would be placed at the cell under the finger.
   final ShipPlacement? preview;
@@ -107,6 +119,9 @@ class BoardCanvas extends StatelessWidget {
                   rows: rows,
                   columns: columns,
                   ships: ships,
+                  shots: shots,
+                  misses: misses,
+                  sunkShips: sunkShips,
                   preview: preview,
                   previewIsValid: previewIsValid,
                 ),
@@ -125,6 +140,9 @@ class BoardPainter extends CustomPainter {
     required this.rows,
     required this.columns,
     required this.ships,
+    this.shots = const <CellCoord>[],
+    this.misses = const <CellCoord>[],
+    this.sunkShips = const <String>{},
     this.preview,
     this.previewIsValid = true,
   });
@@ -137,6 +155,15 @@ class BoardPainter extends CustomPainter {
 
   /// The ships that are already placed.
   final List<ShipPlacement> ships;
+
+  /// The cells that were hit on this board.
+  final List<CellCoord> shots;
+
+  /// The cells that were fired at without hitting a ship.
+  final List<CellCoord> misses;
+
+  /// The ships that were sunk.
+  final Set<String> sunkShips;
 
   /// The ship that would be placed at the cell under the finger.
   final ShipPlacement? preview;
@@ -193,7 +220,32 @@ class BoardPainter extends CustomPainter {
     canvas.drawRect(board, border);
 
     for (final ShipPlacement ship in ships) {
-      _drawShip(canvas, ship, offsetX, offsetY, cellSize, AppTheme.accent, 0.85);
+      final bool sunk = sunkShips.contains(ship.shipId);
+      _drawShip(
+        canvas,
+        ship,
+        offsetX,
+        offsetY,
+        cellSize,
+        sunk ? AppTheme.sunk : AppTheme.accent,
+        sunk ? 0.32 : 0.85,
+      );
+    }
+
+    final double radius = cellSize * .22;
+    for (final CellCoord cell in misses) {
+      final Offset center = Offset(offsetX + (cell.column + .5) * cellSize, offsetY + (cell.row + .5) * cellSize);
+      canvas.drawCircle(center, radius, Paint()..color = AppTheme.miss);
+    }
+    for (final CellCoord cell in shots) {
+      final Offset center = Offset(offsetX + (cell.column + .5) * cellSize, offsetY + (cell.row + .5) * cellSize);
+      final Paint mark = Paint()
+        ..color = AppTheme.hit
+        ..strokeWidth = math.max(2, cellSize * .12)
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(center.translate(-radius, -radius), center.translate(radius, radius), mark);
+      canvas.drawLine(center.translate(-radius, radius), center.translate(radius, -radius), mark);
     }
 
     final ShipPlacement? ghost = preview;
@@ -250,6 +302,9 @@ class BoardPainter extends CustomPainter {
       oldDelegate.rows != rows ||
       oldDelegate.columns != columns ||
       oldDelegate.ships != ships ||
+      oldDelegate.shots != shots ||
+      oldDelegate.misses != misses ||
+      oldDelegate.sunkShips != sunkShips ||
       oldDelegate.preview != preview ||
       oldDelegate.previewIsValid != previewIsValid;
 }

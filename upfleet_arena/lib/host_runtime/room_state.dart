@@ -1,5 +1,7 @@
-import '../../game_engine/placement/placement.dart';
-import '../../shared/models/room_models.dart';
+import '../game_engine/board/board.dart';
+import '../game_engine/combat/combat.dart';
+import '../game_engine/placement/placement.dart';
+import '../shared/models/room_models.dart';
 
 /// The Host-side authoritative record of a room member.
 ///
@@ -94,7 +96,8 @@ class HostMatchState {
     required this.turnOrder,
     required this.activePlayerId,
     required this.startedAt,
-  });
+    Map<String, PlayerBoard>? boards,
+  }) : boards = boards ?? <String, PlayerBoard>{};
 
   /// The identifier of the match.
   final String matchId;
@@ -110,6 +113,54 @@ class HostMatchState {
 
   /// The number of the current turn.
   int turnNumber = 1;
+
+  /// When the current turn ends.
+  DateTime? turnDeadline;
+
+  /// How often the current player ran out of time in a row.
+  int get consecutiveTimeouts => _timeoutStreaks[activePlayerId] ?? 0;
+
+  final Map<String, int> _timeoutStreaks = <String, int>{};
+
+  void recordTimeout(String playerId) {
+    timeouts[playerId] = (timeouts[playerId] ?? 0) + 1;
+    _timeoutStreaks[playerId] = (_timeoutStreaks[playerId] ?? 0) + 1;
+  }
+
+  void recordSuccessfulShot(String playerId) {
+    _timeoutStreaks[playerId] = 0;
+  }
+
+  /// The exact board of every player, including the shots they received.
+  final Map<String, PlayerBoard> boards;
+
+  /// The shots of every attacker against every target.
+  ///
+  /// The first key is the attacker, the second the target and the value the
+  /// cell with the result of the shot.
+  final Map<String, Map<String, Map<CellCoord, ShotResult>>> attackHistory =
+      <String, Map<String, Map<CellCoord, ShotResult>>>{};
+
+  /// How often a player ran out of time.
+  final Map<String, int> timeouts = <String, int>{};
+
+  /// The players whose fleet was sunk.
+  final Set<String> eliminated = <String>{};
+
+  /// Whether the player is still in the match.
+  bool isAlive(String playerId) =>
+      boards.containsKey(playerId) && !eliminated.contains(playerId);
+
+  /// The number of players that are still alive.
+  int get aliveCount => turnOrder.where(isAlive).length;
+
+  /// The winner, once the match is over.
+  String? get winnerPlayerId {
+    for (final String playerId in turnOrder) {
+      if (isAlive(playerId)) return playerId;
+    }
+    return null;
+  }
 }
 
 /// The Host-side authoritative room state.

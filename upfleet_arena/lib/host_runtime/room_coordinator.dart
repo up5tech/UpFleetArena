@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 
 import '../core/utils/secure_random.dart';
 import '../game_engine/board/board.dart';
+import '../game_engine/combat/combat.dart';
 import '../game_engine/fleet/fleet_profile.dart';
 import '../game_engine/placement/auto_placement.dart';
 import '../game_engine/placement/placement.dart';
@@ -18,6 +19,17 @@ import '../shared/protocol/protocol_message.dart';
 import 'client_connection_registry.dart';
 import 'projection_builder.dart';
 import 'room_state.dart';
+
+/// The reason a shot was rejected.
+class _FireRejection {
+  const _FireRejection(this.code, this.message);
+
+  /// The stable error code of the rejection.
+  final String code;
+
+  /// The user-safe explanation.
+  final String message;
+}
 
 /// The Host-side room authority.
 ///
@@ -35,7 +47,31 @@ class RoomCoordinator {
     this.projections = const ProjectionBuilder(),
     DateTime Function()? clock,
   }) : registry = registry ?? ClientConnectionRegistry(),
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? _monotonicClock();
+
+  static DateTime Function() _monotonicClock() {
+    final DateTime origin = DateTime.now();
+    final Stopwatch elapsed = Stopwatch()..start();
+    return () => origin.add(elapsed.elapsed);
+  }
+
+  Future<void>? _commandTail;
+
+  Future<T> _serialize<T>(Future<T> Function() action) {
+    final Future<void>? previous = _commandTail;
+    final Future<T> result = previous == null
+        ? Future<T>.sync(action)
+        : previous.then((_) => action());
+    final Future<void> tail = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
+    _commandTail = tail;
+    unawaited(tail.then((_) {
+      if (identical(_commandTail, tail)) _commandTail = null;
+    }));
+    return result;
+  }
 
   /// The connections this coordinator tracks.
   final ClientConnectionRegistry registry;
@@ -57,8 +93,20 @@ class RoomCoordinator {
       StreamController<MatchStartState>.broadcast();
   final StreamController<String> _hostNotices =
       StreamController<String>.broadcast();
+  final StreamController<int> _hostTurnCountdowns =
+      StreamController<int>.broadcast();
+  final StreamController<MatchSnapshot> _hostMatchSnapshots =
+      StreamController<MatchSnapshot>.broadcast();
 
-  Timer? _placementTimer;
+  final StreamController<ShotFeedback> _hostShotFeedbacks =
+      StreamController<ShotFeedback>.broadcast();
+  final StreamController<PublicActivity> _hostPublicActivities =
+      StreamController<PublicActivity>.broadcast();
+
+  Stream<ShotFeedback> get hostShotFeedbacks => _hostShotFeedbacks.stream;
+  Stream<PublicActivity> get hostPublicActivities => _hostPublicActivities.stream;
+
+  Timer? _phaseTimer;
 
   HostRoomState? _state;
   RoomTransport? _transport;
@@ -92,6 +140,12 @@ class RoomCoordinator {
   /// The match that just started.
   Stream<MatchStartState> get hostMatchStarts => _hostMatchStarts.stream;
 
+  /// The match state of the Host, as every client receives it.
+  Stream<MatchSnapshot> get hostMatchSnapshots => _hostMatchSnapshots.stream;
+
+  /// The seconds that are left before the current turn ends.
+  Stream<int> get hostTurnCountdowns => _hostTurnCountdowns.stream;
+
   /// Messages the Host shows to its own player.
   Stream<String> get hostNotices => _hostNotices.stream;
 
@@ -103,7 +157,22 @@ class RoomCoordinator {
     final HostRoomState? room = _state;
     final DateTime? deadline = room?.placementDeadline;
     if (room == null || deadline == null) return null;
-    final int left = deadline.difference(_now()).inSeconds;
+    final int left =
+        (deadline.difference(_now()).inMicroseconds / Duration.microsecondsPerSecond)
+            .ceil();
+    return left < 0 ? 0 : left;
+  }
+
+  /// The seconds that are left before the current turn ends.
+  ///
+  /// Returns `null` when no turn is running.
+  int? get turnRemainingSeconds {
+    final HostRoomState? room = _state;
+    final DateTime? deadline = room?.match?.turnDeadline;
+    if (room == null || deadline == null) return null;
+    final int left =
+        (deadline.difference(_now()).inMicroseconds / Duration.microsecondsPerSecond)
+            .ceil();
     return left < 0 ? 0 : left;
   }
 
@@ -156,7 +225,13 @@ class RoomCoordinator {
   Future<void> handleMessage(
     ClientSession session,
     ProtocolMessage message,
+  ) => _serialize(() => _handleMessage(session, message));
+
+  Future<void> _handleMessage(
+    ClientSession session,
+    ProtocolMessage message,
   ) async {
+    if (_state?.status == RoomStatus.closed) return;
     // The protocol version is checked before routing: an unknown version may
     // use message shapes this Host does not understand (PLAN.md §12).
     if (message.protocolVersion != AppProtocol.version) {
@@ -190,6 +265,8 @@ class RoomCoordinator {
         await _handlePlacementReady(session, message);
       case ClientMessageType.startPlacement:
         await _handleStartPlacement(session, message);
+      case ClientMessageType.fire:
+        await _handleFire(session, message);
       case ClientMessageType.requestSnapshot:
         await _handleSnapshotRequest(session, message);
       case ClientMessageType.heartbeat:
@@ -368,9 +445,12 @@ class RoomCoordinator {
   /// This is the Host device acting on its own authority. Remote clients
   /// cannot reach it: they go through `_handleKick`, which verifies that the
   /// sender is the Host.
-  Future<void> hostKick(String targetPlayerId) async {
+  Future<void> hostKick(String targetPlayerId) =>
+      _serialize(() => _hostKick(targetPlayerId));
+
+  Future<void> _hostKick(String targetPlayerId) async {
     final HostRoomState? room = _state;
-    if (room == null) return;
+    if (room == null || room.status == RoomStatus.closed) return;
 
     final HostPlayer? target = room.players[targetPlayerId];
     if (target == null) return;
@@ -483,7 +563,7 @@ class RoomCoordinator {
       return;
     }
 
-    await closeRoom(reason: 'host_closed', message: 'The host closed the room.');
+    await _closeRoom(reason: 'host_closed', message: 'The host closed the room.');
   }
 
   /// Closes the room and tells every client to return Home.
@@ -494,13 +574,19 @@ class RoomCoordinator {
   Future<void> closeRoom({
     required String reason,
     required String message,
+  }) => _serialize(() => _closeRoom(reason: reason, message: message));
+
+  Future<void> _closeRoom({
+    required String reason,
+    required String message,
   }) async {
     final HostRoomState? room = _state;
-    if (room == null) return;
+    if (room == null || room.status == RoomStatus.closed) return;
 
     _stopPlacementTimer();
     room.status = RoomStatus.closed;
     room.placementDeadline = null;
+    room.match?.turnDeadline = null;
     room.stateVersion++;
 
     for (final ClientSession session in registry.admittedSessions.toList()) {
@@ -527,7 +613,10 @@ class RoomCoordinator {
   /// which verifies that the sender is the Host.
   ///
   /// Returns the validation problems, or an empty list on success.
-  Future<List<String>> hostUpdateConfig(RoomConfig config) async {
+  Future<List<String>> hostUpdateConfig(RoomConfig config) =>
+      _serialize(() => _hostUpdateConfig(config));
+
+  Future<List<String>> _hostUpdateConfig(RoomConfig config) async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
     if (room.status != RoomStatus.lobby) {
@@ -700,7 +789,10 @@ class RoomCoordinator {
   /// Applies a fleet layout as the Host device.
   ///
   /// Returns the validation problems, or an empty list on success.
-  Future<List<String>> hostSetPlacement(List<ShipPlacement> ships) async {
+  Future<List<String>> hostSetPlacement(List<ShipPlacement> ships) =>
+      _serialize(() => _hostSetPlacement(ships));
+
+  Future<List<String>> _hostSetPlacement(List<ShipPlacement> ships) async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
     if (!_acceptsPlacements(room)) {
@@ -725,18 +817,24 @@ class RoomCoordinator {
   }
 
   /// Places the Host's own fleet automatically.
-  Future<List<String>> hostAutoPlace() async {
+  Future<List<String>> hostAutoPlace() => _serialize(_hostAutoPlace);
+
+  Future<List<String>> _hostAutoPlace() async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
     if (!_acceptsPlacements(room)) {
       return <String>['The fleets cannot be changed any more.'];
     }
+    final List<String> problems = _layoutLockProblems(room, room.hostPlayerId);
+    if (problems.isNotEmpty) return problems;
     await _autoPlace(room, room.hostPlayerId);
     return const <String>[];
   }
 
   /// Confirms the Host's own fleet.
-  Future<List<String>> hostSetReady() async {
+  Future<List<String>> hostSetReady() => _serialize(_hostSetReady);
+
+  Future<List<String>> _hostSetReady() async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
     return _confirmReady(room, room.hostPlayerId);
@@ -853,6 +951,12 @@ class RoomCoordinator {
       return;
     }
 
+    final List<String> problems = _layoutLockProblems(room, playerId);
+    if (problems.isNotEmpty) {
+      await _sendError(session, message, ProtocolErrorCode.placementLocked,
+          problems.join(' '));
+      return;
+    }
     await _autoPlace(room, playerId);
   }
 
@@ -952,6 +1056,9 @@ class RoomCoordinator {
     HostRoomState room,
     String playerId,
   ) async {
+    if (!_acceptsPlacements(room)) {
+      return <String>['The fleets cannot be changed any more.'];
+    }
     final HostPlayerPlacement placement = placementFor(playerId);
     final List<ShipPlacement> ships = placement.ships.values.toList();
 
@@ -980,16 +1087,27 @@ class RoomCoordinator {
 
   /// Whether every connected player confirmed a complete fleet.
   bool _everyoneReady(HostRoomState room) {
-    final List<HostPlayer> players = room.orderedPlayers
-        .where(
-          (HostPlayer player) =>
-              player.status == PlayerConnectionStatus.connected,
-        )
-        .toList();
+    final List<HostPlayer> players = _eligiblePlayers(room);
     if (players.length < RoomConfig.minimumPlayers) return false;
-    return players.every(
-      (HostPlayer player) => placementFor(player.playerId).ready,
-    );
+    return players.every((HostPlayer player) =>
+        room.placements[player.playerId]?.ready == true &&
+        _hasLegalFleet(room, player.playerId));
+  }
+
+  List<HostPlayer> _eligiblePlayers(HostRoomState room) => room.orderedPlayers
+      .where((HostPlayer player) {
+        if (player.status != PlayerConnectionStatus.connected) return false;
+        final ClientSession? session = registry.byPlayerId(player.playerId);
+        return player.isHost ||
+            (session != null && _isLiveMember(room, session));
+      }).toList();
+
+  bool _hasLegalFleet(HostRoomState room, String playerId) {
+    final List<ShipPlacement> ships =
+        room.placements[playerId]?.ships.values.toList() ?? <ShipPlacement>[];
+    return isFleetComplete(_profile(room), ships) &&
+        validateFleetLayout(board: _board(room), profile: _profile(room),
+            ships: ships) == null;
   }
 
   /// Sends the exact fleet layout to its owner only.
@@ -1058,6 +1176,479 @@ class RoomCoordinator {
     );
   }
 
+
+  // --------------------------------------------------------------- combat
+
+  /// The Host-owned turn deadline check.
+  ///
+  /// When the player does not fire in time, the Host skips the turn and
+  /// advances to the next living player (PLAN.md §2.7).
+  Future<void> checkTurnDeadline() => _serialize(_checkTurnDeadline);
+
+  Future<void> _checkTurnDeadline() async {
+    final HostRoomState? room = _state;
+    final HostMatchState? match = room?.match;
+    if (room == null || match == null || room.status != RoomStatus.active) {
+      return;
+    }
+    final int? remaining = turnRemainingSeconds;
+    if (remaining == null) return;
+    if (remaining > 0) {
+      _emitHostTurnCountdown(remaining);
+      return;
+    }
+    match.recordTimeout(match.activePlayerId);
+    _completeTurn(room);
+    await _emitTurnResolution(room);
+  }
+
+  void _completeTurn(HostRoomState room) {
+    final HostMatchState match = room.match!;
+    final String? next = getNextLivingPlayer(
+      turnOrder: match.turnOrder,
+      currentPlayerId: match.activePlayerId,
+      isAlive: match.isAlive,
+    );
+    if (isMatchFinished(match.aliveCount) || next == null) {
+      _stopPlacementTimer();
+      match.turnDeadline = null;
+      room.status = RoomStatus.finished;
+    } else {
+      match.activePlayerId = next;
+      match.turnNumber++;
+      match.turnDeadline = _now().add(
+        Duration(seconds: room.config.turnDurationSeconds),
+      );
+    }
+    room.stateVersion++;
+  }
+
+  Future<void> _emitTurnResolution(HostRoomState room) async {
+    if (room.status == RoomStatus.finished) {
+      await _finishMatch(room, room.match!.winnerPlayerId);
+    } else {
+      _emitHostTurnCountdown(turnRemainingSeconds!);
+      await _broadcastTurnStarted(room);
+      await _broadcastMatchSnapshot(room);
+    }
+  }
+
+  Future<List<String>> hostFire({
+    required String matchId,
+    required int turnNumber,
+    required int expectedStateVersion,
+    required String targetPlayerId,
+    required int row,
+    required int column,
+  }) => _serialize(() async {
+    final HostRoomState? room = _state;
+    final HostMatchState? match = room?.match;
+    if (room == null || match == null || room.status != RoomStatus.active) {
+      return <String>['The match is not running.'];
+    }
+    final _FireRejection? rejection = await _fireAs(
+      room,
+      match,
+      room.hostPlayerId,
+      targetPlayerId,
+      row,
+      column,
+      matchId: matchId,
+      turnNumber: turnNumber,
+      expectedStateVersion: expectedStateVersion,
+    );
+    return rejection == null ? const <String>[] : <String>[rejection.message];
+  });
+
+  bool _isLiveMember(HostRoomState room, ClientSession session) =>
+      session.isAdmitted &&
+      identical(registry.byConnectionId(session.connectionId), session) &&
+      identical(registry.byPlayerId(session.playerId!), session) &&
+      room.players[session.playerId]?.status == PlayerConnectionStatus.connected;
+
+  Future<void> _handleFire(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+    if (!_isLiveMember(room, session) ||
+        (message.playerId != null && message.playerId != session.playerId) ||
+        (message.payload.containsKey('playerId') &&
+            message.payload['playerId'] != session.playerId)) {
+      await _sendError(session, message, ProtocolErrorCode.notRoomMember,
+          'This connection is not authenticated as that room member.');
+      return;
+    }
+    final HostMatchState? match = room.match;
+    if (match == null || room.status != RoomStatus.active) {
+      await _sendError(session, message, ProtocolErrorCode.matchAlreadyFinished,
+          'The match is not running.');
+      return;
+    }
+    final Object? target = message.payload['targetPlayerId'];
+    final Object? row = message.payload['row'];
+    final Object? column = message.payload['column'];
+    final Object? matchId = message.payload['matchId'];
+    final Object? turnNumber = message.payload['turnNumber'];
+    if (message.requestId == null || message.requestId!.trim().isEmpty ||
+        target is! String || target.isEmpty || row is! int || column is! int ||
+        matchId is! String || matchId.isEmpty || turnNumber is! int ||
+        message.expectedStateVersion == null) {
+      await _sendError(session, message, ProtocolErrorCode.malformedPayload,
+          'A fire command requires a request ID, match, turn, version and cell.');
+      return;
+    }
+    if (message.roomId != null && message.roomId != room.roomId) {
+      await _sendError(session, message, ProtocolErrorCode.stateVersionConflict,
+          'That command belongs to another room.');
+      return;
+    }
+    final _FireRejection? rejection = await _fireAs(
+      room, match, session.playerId!, target, row, column,
+      matchId: matchId,
+      turnNumber: turnNumber,
+      expectedStateVersion: message.expectedStateVersion!,
+      requestId: message.requestId,
+    );
+    if (rejection != null) {
+      await _sendError(session, message, rejection.code, rejection.message);
+    }
+  }
+
+  Future<_FireRejection?> _fireAs(
+    HostRoomState room,
+    HostMatchState match,
+    String playerId,
+    String targetId,
+    int row,
+    int column, {
+    required String matchId,
+    required int turnNumber,
+    required int expectedStateVersion,
+    String? requestId,
+  }) async {
+    if (matchId != match.matchId || turnNumber != match.turnNumber ||
+        expectedStateVersion != room.stateVersion) {
+      return const _FireRejection(ProtocolErrorCode.stateVersionConflict,
+          'The match state changed. Request a fresh snapshot.');
+    }
+    if (room.players[playerId]?.status != PlayerConnectionStatus.connected ||
+        !match.isAlive(playerId) || playerId != match.activePlayerId) {
+      return const _FireRejection(ProtocolErrorCode.notYourTurn,
+          'You cannot fire in this turn.');
+    }
+    if (match.turnDeadline == null || !_now().isBefore(match.turnDeadline!)) {
+      await _checkTurnDeadline();
+      return const _FireRejection(ProtocolErrorCode.notYourTurn,
+          'The turn deadline has expired.');
+    }
+    final PlayerBoard? targetBoard = match.boards[targetId];
+    if (targetBoard == null || targetId == playerId || !match.isAlive(targetId)) {
+      return const _FireRejection(ProtocolErrorCode.targetNotAlive,
+          'You cannot shoot at that player.');
+    }
+    if (row < 0 || row >= room.config.rows ||
+        column < 0 || column >= room.config.columns) {
+      return const _FireRejection(ProtocolErrorCode.invalidTargetCell,
+          'That cell is outside the board.');
+    }
+    final CellCoord cell = CellCoord(row, column);
+    if (match.attackHistory[playerId]?[targetId]?.containsKey(cell) ?? false) {
+      return const _FireRejection(ProtocolErrorCode.cellAlreadyFiredAt,
+          'You already fired at that cell.');
+    }
+    final ShotResolution resolution = resolveShot(targetBoard, cell);
+    match.attackHistory
+        .putIfAbsent(playerId, () => <String, Map<CellCoord, ShotResult>>{})
+        .putIfAbsent(targetId, () => <CellCoord, ShotResult>{})[cell] =
+        resolution.result;
+    match.recordSuccessfulShot(playerId);
+    final bool eliminated = targetBoard.isEliminated &&
+        match.eliminated.add(targetId);
+    _completeTurn(room);
+
+    await _sendShotFeedback(room, playerId, targetId, cell, resolution.result,
+        requestId: requestId);
+    await _broadcastPublicActivity(room, playerId, targetId, resolution.result);
+    if (eliminated) await _broadcastPlayerEliminated(room, targetId);
+    await _emitTurnResolution(room);
+    return null;
+  }
+
+  Future<void> _finishMatch(HostRoomState room, String? winnerPlayerId) async {
+    final HostPlayer? winner = winnerPlayerId == null
+        ? null
+        : room.players[winnerPlayerId];
+
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.finished,
+          payload: <String, dynamic>{
+            'winnerPlayerId': winnerPlayerId,
+            'winnerDisplayName': winner?.displayName,
+            'stateVersion': room.stateVersion,
+          },
+        ),
+      );
+    }
+    await _broadcastMatchSnapshot(room);
+    await _broadcastRoomState(room);
+    _emitHostSnapshot();
+  }
+
+  /// Tells the attacker and the target what the shot did.
+  Future<void> _sendShotFeedback(
+    HostRoomState room,
+    String attackerPlayerId,
+    String targetPlayerId,
+    CellCoord cell,
+    ShotResult result, {
+    String? requestId,
+  }) async {
+    final ShotFeedback feedback = ShotFeedback(
+      attackerPlayerId: attackerPlayerId,
+      targetPlayerId: targetPlayerId,
+      row: cell.row,
+      column: cell.column,
+      result: result,
+    );
+
+    if ((room.hostPlayerId == attackerPlayerId ||
+        room.hostPlayerId == targetPlayerId) && !_hostShotFeedbacks.isClosed) {
+      _hostShotFeedbacks.add(feedback);
+    }
+    final ClientSession? attacker = registry.byPlayerId(attackerPlayerId);
+    if (attacker != null) {
+      await _transport?.send(
+        attacker.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.shotResult,
+          requestId: requestId,
+          payload: <String, dynamic>{
+            ...feedback.toJson(),
+            'targetBoard': _targetBoardView(
+              room,
+              attackerPlayerId,
+              targetPlayerId,
+            )?.toJson(),
+          },
+        ),
+      );
+    }
+
+    final ClientSession? target = registry.byPlayerId(targetPlayerId);
+    if (target != null) {
+      await _transport?.send(
+        target.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.shotResult,
+          payload: <String, dynamic>{
+            ...feedback.toJson(),
+            'ownBoard': _ownBoardView(room, targetPlayerId)?.toJson(),
+          },
+        ),
+      );
+    }
+  }
+
+  /// Tells the other players that a shot happened.
+  ///
+  /// The event carries no coordinates: the board of a player stays private
+  /// (PLAN.md §2.2).
+  Future<void> _broadcastPublicActivity(
+    HostRoomState room,
+    String attackerPlayerId,
+    String targetPlayerId,
+    ShotResult result,
+  ) async {
+    final PublicActivity activity = PublicActivity(
+      attackerPlayerId: attackerPlayerId,
+      targetPlayerId: targetPlayerId,
+      result: result,
+    );
+    if (room.hostPlayerId != attackerPlayerId &&
+        room.hostPlayerId != targetPlayerId && !_hostPublicActivities.isClosed) {
+      _hostPublicActivities.add(activity);
+    }
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      final String? playerId = client.playerId;
+      if (playerId == attackerPlayerId || playerId == targetPlayerId) continue;
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.publicActivity,
+          payload: activity.toJson(),
+        ),
+      );
+    }
+  }
+
+  /// Announces that a player lost their whole fleet.
+  Future<void> _broadcastPlayerEliminated(
+    HostRoomState room,
+    String playerId,
+  ) async {
+    final HostPlayer? player = room.players[playerId];
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.playerEliminated,
+          payload: <String, dynamic>{
+            'playerId': playerId,
+            'displayName': player?.displayName,
+          },
+        ),
+      );
+    }
+  }
+
+  /// Announces whose turn it is.
+  Future<void> _broadcastTurnStarted(HostRoomState room) async {
+    final HostMatchState match = room.match!;
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.turnStarted,
+          payload: <String, dynamic>{
+            'activePlayerId': match.activePlayerId,
+            'turnNumber': match.turnNumber,
+            'remainingSeconds': turnRemainingSeconds,
+          },
+        ),
+      );
+    }
+  }
+
+  /// Sends every client its own view of the match.
+  Future<void> _broadcastMatchSnapshot(HostRoomState room) async {
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      final String? playerId = client.playerId;
+      if (playerId == null) continue;
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.stateSnapshot,
+          payload: <String, dynamic>{
+            'snapshot': _matchSnapshot(room, playerId).toJson(),
+          },
+        ),
+      );
+    }
+    _emitHostMatchSnapshot(room);
+  }
+
+  /// Builds the match state one recipient may see.
+  MatchSnapshot _matchSnapshot(HostRoomState room, String viewerPlayerId) {
+    final HostMatchState match = room.match!;
+    return MatchSnapshot(
+      matchId: match.matchId,
+      stateVersion: room.stateVersion,
+      turnNumber: match.turnNumber,
+      activePlayerId: match.activePlayerId,
+      turnRemainingSeconds: turnRemainingSeconds,
+      players: match.turnOrder
+          .map((String playerId) => room.players[playerId]!)
+          .map(
+            (HostPlayer player) => MatchPlayerView(
+              playerId: player.playerId,
+              displayName: player.displayName,
+              alive: match.isAlive(player.playerId),
+              timeouts: match.timeouts[player.playerId] ?? 0,
+            ),
+          )
+          .toList(),
+      ownBoard: _ownBoardView(room, viewerPlayerId),
+      targets: match.turnOrder
+          .where((String playerId) => playerId != viewerPlayerId)
+          .map((String playerId) => room.players[playerId]!)
+          .map(
+            (HostPlayer player) => TargetBoardView(
+              playerId: player.playerId,
+              displayName: player.displayName,
+              alive: match.isAlive(player.playerId),
+              shots: _shotsOf(room, viewerPlayerId, player.playerId),
+            ),
+          )
+          .toList(),
+      winnerPlayerId: room.status == RoomStatus.finished
+          ? match.winnerPlayerId
+          : null,
+    );
+  }
+
+  /// The own board of a player, with the impacts it received.
+  OwnBoardView? _ownBoardView(HostRoomState room, String playerId) {
+    final PlayerBoard? board = room.match?.boards[playerId];
+    if (board == null) return null;
+    return OwnBoardView(
+      ships: board.ships.values
+          .map(
+            (ShipState ship) => ShipView(
+              shipId: ship.shipId,
+              length: ship.length,
+              orientation: ship.placement.orientation,
+              row: ship.placement.row,
+              column: ship.placement.column,
+              hitCells: ship.hitCells.toList(),
+              sunk: ship.isSunk,
+            ),
+          )
+          .toList(),
+      shotsReceived: board.shotsReceived.toList(),
+    );
+  }
+
+  /// The board of a target, as the shooter sees it.
+  TargetBoardView? _targetBoardView(
+    HostRoomState room,
+    String viewerPlayerId,
+    String targetPlayerId,
+  ) {
+    final HostMatchState? match = room.match;
+    if (match == null) return null;
+    return TargetBoardView(
+      playerId: targetPlayerId,
+      displayName: room.players[targetPlayerId]?.displayName ?? 'Player',
+      alive: match.isAlive(targetPlayerId),
+      shots: _shotsOf(room, viewerPlayerId, targetPlayerId),
+    );
+  }
+
+  /// The shots the viewer fired at the target.
+  List<ShotView> _shotsOf(
+    HostRoomState room,
+    String viewerPlayerId,
+    String targetPlayerId,
+  ) {
+    final Map<CellCoord, ShotResult>? shots =
+        room.match?.attackHistory[viewerPlayerId]?[targetPlayerId];
+    if (shots == null) return const <ShotView>[];
+    return shots.entries
+        .map(
+          (MapEntry<CellCoord, ShotResult> entry) => ShotView(
+            row: entry.key.row,
+            column: entry.key.column,
+            result: entry.value,
+          ),
+        )
+        .toList();
+  }
+
+  void _emitHostTurnCountdown(int remainingSeconds) {
+    if (_hostTurnCountdowns.isClosed) return;
+    _hostTurnCountdowns.add(remainingSeconds);
+  }
+
+  void _emitHostMatchSnapshot(HostRoomState room) {
+    if (_hostMatchSnapshots.isClosed) return;
+    _hostMatchSnapshots.add(_matchSnapshot(room, room.hostPlayerId));
+  }
+
   // ----------------------------------------------------------- heartbeat
 
   void _handleHeartbeat(ClientSession session) {
@@ -1073,17 +1664,35 @@ class RoomCoordinator {
     ProtocolMessage message,
   ) async {
     final HostRoomState? room = _state;
-    if (room == null || session.playerId == null) return;
+    if (room == null) return;
+    if (!_isLiveMember(room, session) ||
+        (message.playerId != null && message.playerId != session.playerId)) {
+      await _sendError(session, message, ProtocolErrorCode.notRoomMember,
+          'This connection is not an authenticated room member.');
+      return;
+    }
     await _transport?.send(
       session.connectionId,
       ProtocolMessage(
-        messageType: HostEventType.stateSnapshot,
+        messageType: HostEventType.roomState,
         requestId: message.requestId,
         payload: <String, dynamic>{
           'snapshot': projections.buildFor(room, session.playerId).toJson(),
         },
       ),
     );
+    if (room.match != null) {
+      await _transport?.send(
+        session.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.stateSnapshot,
+          requestId: message.requestId,
+          payload: <String, dynamic>{
+            'snapshot': _matchSnapshot(room, session.playerId!).toJson(),
+          },
+        ),
+      );
+    }
   }
 
   // -------------------------------------------------------------- helpers
@@ -1157,7 +1766,9 @@ class RoomCoordinator {
   /// Starts the preparation phase as the Host device.
   ///
   /// Returns the validation problems, or an empty list on success.
-  Future<List<String>> hostStartPlacement() async {
+  Future<List<String>> hostStartPlacement() => _serialize(_hostStartPlacement);
+
+  Future<List<String>> _hostStartPlacement() async {
     final HostRoomState? room = _state;
     if (room == null) return const <String>[];
     if (room.status != RoomStatus.lobby) {
@@ -1214,12 +1825,7 @@ class RoomCoordinator {
   /// The reasons the preparation cannot start yet.
   List<String> _preparationProblems(HostRoomState room) {
     final List<String> problems = <String>[];
-    final int connected = room.players.values
-        .where(
-          (HostPlayer player) =>
-              player.status == PlayerConnectionStatus.connected,
-        )
-        .length;
+    final int connected = _eligiblePlayers(room).length;
     if (connected < RoomConfig.minimumPlayers) {
       problems.add(
         'At least ${RoomConfig.minimumPlayers} connected players are needed '
@@ -1238,15 +1844,13 @@ class RoomCoordinator {
     );
     room.stateVersion++;
 
-    _placementTimer?.cancel();
-    _placementTimer = Timer.periodic(const Duration(seconds: 1), (Timer _) {
-      unawaited(checkPreparationDeadline());
-    });
+    _startPhaseTimer();
 
     await _broadcastRoomState(room);
     await _broadcastPlacementStarted(room);
     _emitHostCountdown(room.config.placementDurationSeconds);
     _emitHostSnapshot();
+    if (_everyoneReady(room)) await _startMatch(room);
   }
 
   /// The Host-owned deadline check.
@@ -1254,7 +1858,9 @@ class RoomCoordinator {
   /// The Host calls this on its own timer and again after the app resumes,
   /// so a preparation that ran out while the app was suspended still ends at
   /// the right moment (PLAN.md §9.4).
-  Future<void> checkPreparationDeadline() async {
+  Future<void> checkPreparationDeadline() => _serialize(_checkPreparationDeadline);
+
+  Future<void> _checkPreparationDeadline() async {
     final HostRoomState? room = _state;
     if (room == null || room.status != RoomStatus.placement) return;
     final int? remaining = placementRemainingSeconds;
@@ -1272,10 +1878,9 @@ class RoomCoordinator {
     _stopPlacementTimer();
     room.stateVersion++;
 
-    for (final HostPlayer player in room.orderedPlayers) {
-      if (!player.occupiesSeat) continue;
+    for (final HostPlayer player in _eligiblePlayers(room)) {
       final HostPlayerPlacement placement = placementFor(player.playerId);
-      if (placement.ready && placement.ships.isNotEmpty) continue;
+      if (placement.ready && _hasLegalFleet(room, player.playerId)) continue;
 
       final List<ShipPlacement> ships = autoPlaceFleet(
         board: _board(room),
@@ -1314,9 +1919,8 @@ class RoomCoordinator {
 
   /// Starts the match with a randomized turn order (PLAN.md §2.6).
   Future<void> _startMatch(HostRoomState room) async {
-    final List<HostPlayer> players = room.orderedPlayers
-        .where((HostPlayer player) => player.occupiesSeat)
-        .toList();
+    if (room.status != RoomStatus.placement || room.match != null) return;
+    final List<HostPlayer> players = _eligiblePlayers(room);
     if (players.length < RoomConfig.minimumPlayers) {
       await _cancelPreparation(
         room,
@@ -1325,9 +1929,19 @@ class RoomCoordinator {
       return;
     }
 
+    if (!_everyoneReady(room)) return;
+
     final List<HostPlayer> order = List<HostPlayer>.from(players)
       ..shuffle(Random());
     final String matchId = SecureRandom.uuidV4();
+
+    final Map<String, PlayerBoard> boards = <String, PlayerBoard>{};
+    for (final HostPlayer player in order) {
+      boards[player.playerId] = PlayerBoard(
+        playerId: player.playerId,
+        ships: placementFor(player.playerId).ships.values.toList(),
+      );
+    }
 
     room.match = HostMatchState(
       matchId: matchId,
@@ -1335,11 +1949,16 @@ class RoomCoordinator {
           .map((HostPlayer player) => player.playerId)
           .toList(),
       activePlayerId: order.first.playerId,
-      startedAt: DateTime.now(),
+      startedAt: _now(),
+      boards: boards,
+    );
+    room.match!.turnDeadline = _now().add(
+      Duration(seconds: room.config.turnDurationSeconds),
     );
     room.status = RoomStatus.active;
     room.placementDeadline = null;
     room.stateVersion++;
+    _startPhaseTimer();
 
     final MatchStartState state = MatchStartState(
       matchId: matchId,
@@ -1361,6 +1980,7 @@ class RoomCoordinator {
     await _broadcastRoomState(room);
     await _broadcastMatchStarted(state);
     _emitHostMatchStart(state);
+    await _broadcastMatchSnapshot(room);
     _emitHostSnapshot();
   }
 
@@ -1391,8 +2011,8 @@ class RoomCoordinator {
   /// Cancels the preparation when too few players are left.
   Future<void> _checkPreparationCancellation(HostRoomState room) async {
     if (room.status != RoomStatus.placement) return;
-    final int seated = room.seatedCount;
-    if (seated < RoomConfig.minimumPlayers) {
+    final int connected = _eligiblePlayers(room).length;
+    if (connected < RoomConfig.minimumPlayers) {
       await _cancelPreparation(
         room,
         'Not enough players are left to start the match.',
@@ -1400,9 +2020,28 @@ class RoomCoordinator {
     }
   }
 
+  /// Runs the deadline of the current phase.
+  void _startPhaseTimer() {
+    _phaseTimer?.cancel();
+    _phaseTimer = Timer.periodic(const Duration(seconds: 1), (Timer _) {
+      unawaited(_tickPhase());
+    });
+  }
+
   void _stopPlacementTimer() {
-    _placementTimer?.cancel();
-    _placementTimer = null;
+    _phaseTimer?.cancel();
+    _phaseTimer = null;
+  }
+
+  /// Checks the deadline of the phase the room is in.
+  Future<void> _tickPhase() async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+    if (room.status == RoomStatus.placement) {
+      await checkPreparationDeadline();
+    } else if (room.status == RoomStatus.active) {
+      await checkTurnDeadline();
+    }
   }
 
   /// Tells every client that the preparation started.
@@ -1460,13 +2099,19 @@ class RoomCoordinator {
       sha256.convert(utf8.encode(value)).toString();
 
   /// Releases the resources held by the coordinator.
-  Future<void> dispose() async {
+  Future<void> dispose() => _serialize(_dispose);
+
+  Future<void> _dispose() async {
     _stopPlacementTimer();
     await _hostSnapshots.close();
     await _hostPlacementStates.close();
     await _hostReadinessStates.close();
     await _hostCountdowns.close();
     await _hostMatchStarts.close();
+    await _hostTurnCountdowns.close();
+    await _hostMatchSnapshots.close();
+    await _hostShotFeedbacks.close();
+    await _hostPublicActivities.close();
     await _hostNotices.close();
     registry.clear();
     _state = null;

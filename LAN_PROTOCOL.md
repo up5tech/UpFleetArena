@@ -149,7 +149,7 @@ The discovery backend is still under evaluation — see
 | `placement:set` | Set the fleet layout | Sender owns the board; the room still accepts placements; layout valid |
 | `placement:auto` | Request automatic placement | Sender owns the board; the room still accepts placements |
 | `placement:ready` | Confirm a complete fleet | All ships placed legally |
-| `game:fire` | Fire at a coordinate | Active turn owner; living target; valid cell; no repeated shot |
+| `game:fire` | Fire at a coordinate | Authenticated sender owns the live turn; the command names the current match, turn and state version; living target; valid cell; no repeated shot for this attacker-target pair |
 | `game:request-snapshot` | Request the current authorized state | Sender is still admitted to the room/match |
 | `client:heartbeat` | Report connection health | Valid active connection |
 | `session:resume` | Reclaim a temporarily disconnected seat | Resume token valid; Host room still active; grace period not expired |
@@ -607,10 +607,126 @@ The preparation was cancelled and the room returned to the lobby:
 }
 ```
 
+## 8.6 Combat
+
+### `game:fire`
+
+```json
+{
+  "messageType": "game:fire",
+  "requestId": "fire-17",
+  "roomId": "room-uuid",
+  "expectedStateVersion": 14,
+  "payload": {
+    "matchId": "match-uuid",
+    "turnNumber": 5,
+    "targetPlayerId": "player-uuid",
+    "row": 3,
+    "column": 7
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `requestId` | Required. Echoed back in the `game:shot-result` acknowledgement so the sender can match the answer to its own request |
+| `expectedStateVersion` | Required. The version the sender believed was current |
+| `matchId`, `turnNumber` | The match and turn the shot was aimed at |
+| `targetPlayerId` | The opponent. The attacker may never be the target |
+| `row`, `column` | Zero-based cell on the target's board |
+
+The Host resolves the sender from the accepted socket and never trusts a
+`playerId` in the envelope or the payload. The command is rejected, without
+changing any state, when:
+
+| Condition | Code |
+|---|---|
+| The connection is not a live, connected member | `NOT_ROOM_MEMBER` |
+| No match is running | `MATCH_ALREADY_FINISHED` |
+| `matchId`, `turnNumber` or `expectedStateVersion` is stale | `STATE_VERSION_CONFLICT` |
+| The sender does not own the live turn, or the deadline already passed | `NOT_YOUR_TURN` |
+| The target is unknown, eliminated or the sender themself | `TARGET_NOT_ALIVE` |
+| The cell is outside the board | `INVALID_TARGET_CELL` |
+| A field is missing or has the wrong type | `MALFORMED_PAYLOAD` |
+
+The no-repeat rule is **per attacker-target pair**: two different players may
+both fire at the same cell of the same target, and each of them may fire at
+any given cell of a target only once.
+
+An accepted shot commits the damage, the next actor and the new turn deadline
+before the first frame is written, so a concurrent command or a deadline tick
+can never consume the same turn twice. The state version increases exactly
+once.
+
+### Combat events
+
+| Event | Recipients | Payload |
+|---|---|---|
+| `game:shot-result` | The attacker and the target | `attackerPlayerId`, `targetPlayerId`, `row`, `column`, `result` (`miss`, `hit`, `shipSunk`), plus the attacker's `targetBoard` or the target's `ownBoard`. The `requestId` is echoed to the attacker only |
+| `game:public-activity` | Every other player | `attackerPlayerId`, `targetPlayerId`, `result` — no coordinates and no ship data |
+| `game:turn-started` | Everybody | `activePlayerId`, `turnNumber`, `remainingSeconds` |
+| `game:player-eliminated` | Everybody | `playerId`, `displayName` |
+| `game:state-snapshot` | Everybody, one filtered view each | `snapshot` — see below |
+| `game:finished` | Everybody | `winnerPlayerId`, `winnerDisplayName`, `stateVersion` |
+
+### `game:state-snapshot`
+
+The Host sends a permission-filtered view of the match to every client after
+each accepted change:
+
+```json
+{
+  "messageType": "game:state-snapshot",
+  "payload": {
+    "snapshot": {
+      "matchId": "match-uuid",
+      "stateVersion": 15,
+      "turnNumber": 6,
+      "activePlayerId": "player-uuid",
+      "turnRemainingSeconds": 30,
+      "players": [
+        { "playerId": "player-uuid", "displayName": "Alice", "alive": true, "timeouts": 0 }
+      ],
+      "ownBoard": {
+        "ships": [
+          {
+            "shipId": "ship-1", "length": 4, "orientation": "horizontal",
+            "row": 0, "column": 0, "hitCells": [ { "row": 0, "column": 1 } ],
+            "sunk": false
+          }
+        ],
+        "shotsReceived": [ { "row": 0, "column": 1 } ]
+      },
+      "targets": [
+        {
+          "playerId": "player-uuid", "displayName": "Bob", "alive": true,
+          "shots": [ { "row": 0, "column": 0, "result": "hit" } ]
+        }
+      ],
+      "winnerPlayerId": null
+    }
+  }
+}
+```
+
+`ownBoard` is the exact fleet of the recipient. `targets[]` carries only the
+shots **the recipient** fired at that opponent: the position of another
+player's ships never leaves the Host except in that player's own view. The
+player list follows the turn order, not the join order.
+
+### The turn deadline
+
+The Host owns the turn deadline exactly like the preparation deadline. The
+`host:heartbeat` carries `turnRemainingSeconds` while a turn is running, and
+a client that runs out of time simply has its turn skipped: the player is not
+eliminated for a single timeout, and the number of timeouts per player is
+reported in `players[]`.
+
 ## 9. Heartbeats and host loss
 
 - The Host sends `host:heartbeat` approximately every 3 s. The event
-  carries the current `stateVersion`.
+  carries the current `stateVersion`, plus `placementRemainingSeconds` while
+  the preparation runs and `turnRemainingSeconds` while a turn runs.
 - Clients track the time since the last valid Host heartbeat using a monotonic
   timer.
 - After roughly 8–10 s without a heartbeat, the client marks the room
@@ -641,4 +757,7 @@ The Host applies a shot atomically inside its state coordinator:
 14. Acknowledge the sender.
 
 State-changing commands are serialized through a single coordinator so two
-commands can never consume the same turn concurrently.
+commands can never consume the same turn concurrently. The commit of steps 7
+to 12 happens before the first frame of step 13 is written, so an accepted
+shot can never be observed in a half-applied state, and a command that was
+already rejected never damages a board.

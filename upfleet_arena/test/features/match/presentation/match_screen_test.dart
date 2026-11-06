@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/match/presentation/match_screen.dart';
+import 'package:upfleet_arena/features/match/widgets/battle_board.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
+import 'package:upfleet_arena/game_engine/board/board.dart';
+import 'package:upfleet_arena/game_engine/combat/combat.dart';
+import 'package:upfleet_arena/game_engine/placement/placement.dart';
 import 'package:upfleet_arena/shared/models/match_models.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
 
@@ -12,82 +16,190 @@ class _FakeSessionController extends RoomSessionController {
   _FakeSessionController({required this.session});
 
   final RoomSessionState session;
+  final List<(String, int, int)> shots = <(String, int, int)>[];
 
   @override
   RoomSessionState build() => session;
+
+  @override
+  Future<void> fire({
+    required String targetPlayerId,
+    required int row,
+    required int column,
+  }) async {
+    shots.add((targetPlayerId, row, column));
+  }
 }
 
-RoomSessionState _session() => RoomSessionState(
-  role: RoomRole.client,
-  status: RoomSessionStatus.inRoom,
-  snapshot: const RoomSnapshot(
-    roomId: 'room-1',
-    status: RoomStatus.active,
-    config: RoomConfig.defaults,
-    players: <PlayerSummary>[],
-    viewerPlayerId: 'player-1',
-    viewerIsHost: false,
-    stateVersion: 9,
-  ),
-  playerId: 'player-1',
-  match: const MatchStartState(
-    matchId: 'match-1',
-    turnOrder: <TurnOrderEntry>[
-      TurnOrderEntry(playerId: 'player-2', displayName: 'Bob'),
-      TurnOrderEntry(playerId: 'player-1', displayName: 'Alice'),
+MatchSnapshot _snapshot({bool myTurn = true}) => MatchSnapshot(
+  matchId: 'match-1',
+  stateVersion: 9,
+  turnNumber: 3,
+  activePlayerId: myTurn ? 'player-1' : 'player-2',
+  turnRemainingSeconds: 22,
+  players: const <MatchPlayerView>[
+    MatchPlayerView(
+      playerId: 'player-1',
+      displayName: 'Alice',
+      alive: true,
+      timeouts: 0,
+    ),
+    MatchPlayerView(
+      playerId: 'player-2',
+      displayName: 'Bob',
+      alive: true,
+      timeouts: 1,
+    ),
+  ],
+  ownBoard: const OwnBoardView(
+    ships: <ShipView>[
+      ShipView(
+        shipId: 'ship-1',
+        length: 4,
+        orientation: ShipOrientation.horizontal,
+        row: 0,
+        column: 0,
+        hitCells: <CellCoord>[CellCoord(0, 1)],
+        sunk: false,
+      ),
     ],
-    activePlayerId: 'player-2',
-    boardRows: 10,
-    boardColumns: 10,
-    fleetPreset: FleetPreset.standard,
-    stateVersion: 9,
+    shotsReceived: <CellCoord>[CellCoord(0, 1)],
   ),
+  targets: const <TargetBoardView>[
+    TargetBoardView(
+      playerId: 'player-2',
+      displayName: 'Bob',
+      alive: true,
+      shots: <ShotView>[ShotView(row: 2, column: 3, result: ShotResult.miss)],
+    ),
+  ],
 );
 
-void main() {
-  testWidgets('the turn order shows who shoots first', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          roomSessionControllerProvider.overrideWith(
-            () => _FakeSessionController(session: _session()),
-          ),
-        ],
-        child: const MaterialApp(home: MatchScreen()),
+RoomSessionState _session({bool myTurn = true, ShotFeedback? feedback}) =>
+    RoomSessionState(
+      role: RoomRole.client,
+      status: RoomSessionStatus.inRoom,
+      snapshot: const RoomSnapshot(
+        roomId: 'room-1',
+        status: RoomStatus.active,
+        config: RoomConfig.defaults,
+        players: <PlayerSummary>[],
+        viewerPlayerId: 'player-1',
+        viewerIsHost: false,
+        stateVersion: 9,
+      ),
+      playerId: 'player-1',
+      matchSnapshot: _snapshot(myTurn: myTurn),
+      lastShot: feedback,
+      turnCountdown: Countdown(
+        remainingSeconds: 22,
       ),
     );
-    await tester.pumpAndSettle();
 
-    expect(find.text('Turn order'), findsOneWidget);
-    expect(find.text('Bob shoots first'), findsOneWidget);
-    expect(find.text('Bob'), findsOneWidget);
-    expect(find.text('Alice (you)'), findsOneWidget);
-    expect(find.text('First'), findsOneWidget);
-    expect(find.text('Board 10×10 · Standard fleet'), findsOneWidget);
+Widget _app(_FakeSessionController controller) {
+  return ProviderScope(
+    overrides: [
+      roomSessionControllerProvider.overrideWith(() => controller),
+    ],
+    child: const MaterialApp(home: MatchScreen()),
+  );
+}
+
+void main() {
+  setUp(() {
+    final TestWidgetsFlutterBinding binding =
+        TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(1200, 3000);
+    binding.platformDispatcher.views.first.devicePixelRatio = 1;
+    addTearDown(() {
+      binding.platformDispatcher.views.first.resetPhysicalSize();
+      binding.platformDispatcher.views.first.resetDevicePixelRatio();
+    });
   });
 
-  testWidgets('a match that did not start yet says so', (
+  testWidgets('the turn and the target are shown', (WidgetTester tester) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    expect(find.text('Your turn'), findsOneWidget);
+    expect(find.text('Turn 3 · 22s left'), findsOneWidget);
+    expect(find.text('Bob'), findsOneWidget);
+    expect(find.byType(BattleBoard), findsOneWidget);
+  });
+
+  testWidgets('firing sends the shot of the picked cell', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          roomSessionControllerProvider.overrideWith(
-            () => _FakeSessionController(
-              session: const RoomSessionState(
-                role: RoomRole.client,
-                status: RoomSessionStatus.inRoom,
-              ),
-            ),
-          ),
-        ],
-        child: const MaterialApp(home: MatchScreen()),
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('Bob'));
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BattleBoard));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.tapAt(Offset(board.left + cell * 4, board.top + cell * 4));
+    await tester.pump();
+
+    await tester.tap(find.text('Fire at this cell'));
+    await tester.pump();
+
+    expect(controller.shots, hasLength(1));
+    expect(controller.shots.single.$1, 'player-2');
+    expect(controller.shots.single.$2, 4);
+    expect(controller.shots.single.$3, 4);
+  });
+
+  testWidgets('a player who is not active cannot fire', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(myTurn: false),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    expect(find.text('Bob is shooting'), findsOneWidget);
+
+    final FilledButton fire = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Wait for your turn'),
+    );
+    expect(fire.onPressed, isNull);
+  });
+
+  testWidgets('the result of a shot is shown', (WidgetTester tester) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(
+        feedback: const ShotFeedback(
+          attackerPlayerId: 'player-1',
+          targetPlayerId: 'player-2',
+          row: 1,
+          column: 1,
+          result: ShotResult.hit,
+        ),
       ),
     );
+    await tester.pumpWidget(_app(controller));
+
+    expect(find.text('Your shot hit a ship.'), findsOneWidget);
+  });
+
+  testWidgets('the players tab shows the turn order and the timeouts', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('Players'));
     await tester.pumpAndSettle();
 
-    expect(find.text('The match has not started yet.'), findsOneWidget);
+    expect(find.text('Alice (you)'), findsOneWidget);
+    expect(find.text('1 timeouts'), findsOneWidget);
+    expect(find.text('In the match'), findsNWidgets(2));
   });
 }

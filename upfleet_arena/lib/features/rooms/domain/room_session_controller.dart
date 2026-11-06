@@ -67,6 +67,12 @@ class RoomSessionState {
     this.countdown,
     this.match,
     this.notice,
+    this.matchSnapshot,
+    this.lastShot,
+    this.turnCountdown,
+    this.firePending = false,
+    this.combatError,
+    this.lastActivity,
   });
 
   /// Whether this device hosts, joined, or is outside a room.
@@ -112,13 +118,25 @@ class RoomSessionState {
   final String? placementError;
 
   /// The preparation countdown, as the Host last reported it.
-  final PlacementCountdown? countdown;
+  final Countdown? countdown;
 
   /// The match that started, once the preparation ended.
   final MatchStartState? match;
 
   /// A message the Host sent to this player.
   final String? notice;
+
+  /// The permission-filtered state of the running match.
+  final MatchSnapshot? matchSnapshot;
+
+  /// The result of the last shot this player was involved in.
+  final ShotFeedback? lastShot;
+
+  /// The countdown of the current turn.
+  final Countdown? turnCountdown;
+  final bool firePending;
+  final String? combatError;
+  final PublicActivity? lastActivity;
 
   /// Whether this device hosts the room.
   bool get isHost => role == RoomRole.host;
@@ -150,6 +168,12 @@ class RoomSessionState {
     Object? countdown = _unset,
     Object? match = _unset,
     Object? notice = _unset,
+    Object? matchSnapshot = _unset,
+    Object? lastShot = _unset,
+    Object? turnCountdown = _unset,
+    bool? firePending,
+    Object? combatError = _unset,
+    Object? lastActivity = _unset,
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
@@ -169,9 +193,21 @@ class RoomSessionState {
         : placementError as String?,
     countdown: identical(countdown, _unset)
         ? this.countdown
-        : countdown as PlacementCountdown?,
+        : countdown as Countdown?,
     match: identical(match, _unset) ? this.match : match as MatchStartState?,
     notice: identical(notice, _unset) ? this.notice : notice as String?,
+    matchSnapshot: identical(matchSnapshot, _unset)
+        ? this.matchSnapshot
+        : matchSnapshot as MatchSnapshot?,
+    lastShot: identical(lastShot, _unset)
+        ? this.lastShot
+        : lastShot as ShotFeedback?,
+    turnCountdown: identical(turnCountdown, _unset)
+        ? this.turnCountdown
+        : turnCountdown as Countdown?,
+    firePending: firePending ?? this.firePending,
+    combatError: identical(combatError, _unset) ? this.combatError : combatError as String?,
+    lastActivity: identical(lastActivity, _unset) ? this.lastActivity : lastActivity as PublicActivity?,
   );
 
   static const Object _unset = Object();
@@ -197,7 +233,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   StreamSubscription<MatchStartState>? _clientMatchSubscription;
   StreamSubscription<String>? _hostNoticeSubscription;
   StreamSubscription<String>? _clientNoticeSubscription;
+  StreamSubscription<MatchSnapshot>? _hostMatchSnapshotSubscription;
+  StreamSubscription<MatchSnapshot>? _clientMatchSnapshotSubscription;
+  StreamSubscription<ShotFeedback>? _hostShotSubscription;
+  StreamSubscription<ShotFeedback>? _clientShotSubscription;
+  StreamSubscription<int>? _hostTurnCountdownSubscription;
+  StreamSubscription<int>? _clientTurnCountdownSubscription;
   AppLifecycleListener? _lifecycleListener;
+  StreamSubscription<PublicActivity>? _hostActivitySubscription;
+  StreamSubscription<PublicActivity>? _clientActivitySubscription;
+  (String, int)? _submittedTurn;
 
   @override
   RoomSessionState build() {
@@ -214,6 +259,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     final HostRoomService? service = _hostService;
     if (service == null) return;
     await service.coordinator.checkPreparationDeadline();
+    await service.coordinator.checkTurnDeadline();
   }
 
   // ----------------------------------------------------------------- host
@@ -225,7 +271,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   }) async {
     await _teardown();
 
-    state = state.copyWith(
+    state = const RoomSessionState().copyWith(
       role: RoomRole.host,
       status: RoomSessionStatus.working,
       errorCode: null,
@@ -254,14 +300,6 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       final int port = await service.start(
         label: '${profile.displayName}’s room',
       );
-      service.coordinator.createRoom(
-        hostDisplayName: profile.displayName,
-        avatarId: profile.avatarId,
-        deviceId: ref.read(localPreferencesProvider).deviceId,
-        config: effectiveConfig,
-        tcpPort: port,
-      );
-
       _hostSubscription = service.coordinator.hostSnapshots.listen(
         (RoomSnapshot snapshot) {
           state = state.copyWith(snapshot: snapshot);
@@ -281,10 +319,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       _hostCountdownSubscription = service.coordinator.hostCountdowns.listen(
         (int remaining) {
           state = state.copyWith(
-            countdown: PlacementCountdown(
+            countdown: Countdown(
               remainingSeconds: remaining,
-              syncedAt: DateTime.now(),
-            ),
+                          ),
           );
         },
       );
@@ -301,6 +338,24 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         },
       );
 
+      _hostMatchSnapshotSubscription = service.coordinator.hostMatchSnapshots
+          .listen(_acceptMatchSnapshot);
+      _hostTurnCountdownSubscription = service.coordinator.hostTurnCountdowns
+          .listen(_acceptTurnCountdown);
+      _hostShotSubscription = service.coordinator.hostShotFeedbacks.listen(
+        (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
+      );
+      _hostActivitySubscription = service.coordinator.hostPublicActivities.listen(
+        (PublicActivity activity) => state = state.copyWith(lastActivity: activity, lastShot: null),
+      );
+
+      service.coordinator.createRoom(
+        hostDisplayName: profile.displayName,
+        avatarId: profile.avatarId,
+        deviceId: ref.read(localPreferencesProvider).deviceId,
+        config: effectiveConfig,
+        tcpPort: port,
+      );
       state = state.copyWith(
         status: RoomSessionStatus.inRoom,
         inviteCode: service.coordinator.inviteCode,
@@ -379,6 +434,76 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
     _clientSession?.startPlacement();
     return const <String>[];
+  }
+
+  Future<void> fire({
+    required String targetPlayerId,
+    required int row,
+    required int column,
+  }) async {
+    final MatchSnapshot? snapshot = state.matchSnapshot;
+    if (!state.isInRoom || snapshot == null || state.firePending) return;
+    if (snapshot.winnerPlayerId != null ||
+        snapshot.activePlayerId != state.playerId ||
+        snapshot.playerById(state.playerId ?? '')?.alive != true) {
+      return;
+    }
+    final (String, int) turn = (snapshot.matchId, snapshot.turnNumber);
+    if (_submittedTurn == turn) return;
+    _submittedTurn = turn;
+    state = state.copyWith(firePending: true, combatError: null);
+    try {
+      final HostRoomService? service = _hostService;
+      final List<String> problems;
+      if (service != null) {
+        problems = await service.coordinator.hostFire(
+          matchId: snapshot.matchId,
+          turnNumber: snapshot.turnNumber,
+          expectedStateVersion: snapshot.stateVersion,
+          targetPlayerId: targetPlayerId,
+          row: row,
+          column: column,
+        );
+      } else {
+        problems = await _clientSession?.fire(
+          matchId: snapshot.matchId,
+          turnNumber: snapshot.turnNumber,
+          expectedStateVersion: snapshot.stateVersion,
+          targetPlayerId: targetPlayerId,
+          row: row,
+          column: column,
+        ) ?? <String>['The host is not connected.'];
+      }
+      if (!ref.mounted || state.matchSnapshot?.matchId != snapshot.matchId) return;
+      if (problems.isNotEmpty) _submittedTurn = null;
+      state = state.copyWith(combatError: problems.isEmpty ? null : problems.join(' '));
+    } on Object {
+      if (ref.mounted && state.isInRoom) {
+        state = state.copyWith(combatError: 'The shot could not be confirmed.');
+      }
+    } finally {
+      if (ref.mounted) state = state.copyWith(firePending: false);
+    }
+  }
+
+  void _acceptMatchSnapshot(MatchSnapshot snapshot) {
+    final MatchSnapshot? current = state.matchSnapshot;
+    if (current != null &&
+        current.matchId == snapshot.matchId &&
+        snapshot.stateVersion < current.stateVersion) {
+      return;
+    }
+    state = state.copyWith(
+      matchSnapshot: snapshot,
+      turnCountdown: snapshot.winnerPlayerId != null || snapshot.turnRemainingSeconds == null
+          ? null
+          : Countdown(remainingSeconds: snapshot.turnRemainingSeconds!),
+    );
+  }
+
+  void _acceptTurnCountdown(int remaining) {
+    if (state.matchSnapshot?.winnerPlayerId != null) return;
+    state = state.copyWith(turnCountdown: Countdown(remainingSeconds: remaining));
   }
 
   /// Removes a player from the room. Host only.
@@ -462,7 +587,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   }) async {
     await _teardown();
 
-    state = state.copyWith(
+    state = const RoomSessionState().copyWith(
       role: RoomRole.client,
       status: RoomSessionStatus.working,
       errorCode: null,
@@ -487,10 +612,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     );
     _clientCountdownSubscription = session.countdowns.listen((int remaining) {
       state = state.copyWith(
-        countdown: PlacementCountdown(
+        countdown: Countdown(
           remainingSeconds: remaining,
-          syncedAt: DateTime.now(),
-        ),
+                  ),
       );
     });
     _clientMatchSubscription = session.matchStarts.listen(
@@ -503,6 +627,14 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         state = state.copyWith(notice: notice, countdown: null);
       },
     );
+    _clientMatchSnapshotSubscription = session.matchSnapshots.listen(_acceptMatchSnapshot);
+    _clientShotSubscription = session.shotFeedbacks.listen(
+      (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
+    );
+    _clientActivitySubscription = session.publicActivities.listen(
+      (PublicActivity activity) => state = state.copyWith(lastActivity: activity, lastShot: null),
+    );
+    _clientTurnCountdownSubscription = session.turnCountdowns.listen(_acceptTurnCountdown);
     _eventSubscription = session.events.listen((RoomClientEvent event) {
       switch (event) {
         case RoomJoinedEvent(:final String roomId):
@@ -517,6 +649,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
             errorMessage: message,
           );
         case RoomErrorEvent(:final String code, :final String message):
+          if (state.matchSnapshot != null && state.isInRoom) {
+            state = state.copyWith(combatError: message, firePending: false);
+            break;
+          }
           if (_placementErrorCodes.contains(code)) {
             // A rejected placement only concerns the fleet: the room stays.
             state = state.copyWith(placementError: message);
@@ -613,10 +749,28 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _hostNoticeSubscription = null;
     await _clientNoticeSubscription?.cancel();
     _clientNoticeSubscription = null;
+    await _hostMatchSnapshotSubscription?.cancel();
+    _hostMatchSnapshotSubscription = null;
+    await _clientMatchSnapshotSubscription?.cancel();
+    _clientMatchSnapshotSubscription = null;
+    await _hostShotSubscription?.cancel();
+    _hostShotSubscription = null;
+    await _clientShotSubscription?.cancel();
+    _clientShotSubscription = null;
+    await _hostTurnCountdownSubscription?.cancel();
+    _hostTurnCountdownSubscription = null;
+    await _clientTurnCountdownSubscription?.cancel();
+    _clientTurnCountdownSubscription = null;
 
+    await _hostActivitySubscription?.cancel();
+    _hostActivitySubscription = null;
+    await _clientActivitySubscription?.cancel();
+    _clientActivitySubscription = null;
+    _submittedTurn = null;
     final HostRoomService? service = _hostService;
     _hostService = null;
     await service?.stop();
+    await service?.coordinator.dispose();
 
     final RoomClientSession? session = _clientSession;
     _clientSession = null;
