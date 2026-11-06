@@ -89,8 +89,8 @@ class CreateRoomScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'These are the frozen MVP defaults. The host settings '
-                      'screen arrives in Phase 2.',
+                      'These are the default settings. The host can change '
+                      'them in the lobby before the match starts.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),

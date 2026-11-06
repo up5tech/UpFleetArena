@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/home/presentation/home_screen.dart';
 import '../features/lan_lab/presentation/lan_lab_screen.dart';
+import '../features/lobby/presentation/host_settings_screen.dart';
 import '../features/lobby/presentation/lobby_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/rooms/presentation/create_room_screen.dart';
@@ -11,7 +12,8 @@ import '../features/rooms/presentation/join_room_screen.dart';
 /// Application router.
 ///
 /// Phase 0 exposed the home screen and the LAN Lab. Phase 1 adds the profile,
-/// the create/join flows and the lobby (PLAN.md §10).
+/// the create/join flows and the lobby. Phase 2 adds the Host settings screen
+/// (PLAN.md §10).
 class AppRouter {
   const AppRouter._();
 
@@ -48,6 +50,12 @@ class AppRouter {
         name: 'lobby',
         builder: (BuildContext context, GoRouterState state) =>
             const LobbyScreen(),
+      ),
+      GoRoute(
+        path: '/lobby/settings',
+        name: 'host-settings',
+        builder: (BuildContext context, GoRouterState state) =>
+            const HostSettingsScreen(),
       ),
       GoRoute(
         path: '/lan-lab',

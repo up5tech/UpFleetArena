@@ -104,6 +104,16 @@ enum FleetPreset {
   /// Wire key, e.g. `STANDARD`.
   String get wire => name.toUpperCase();
 
+  /// Human-readable name of the preset.
+  String get label => switch (this) {
+    FleetPreset.small => 'Small',
+    FleetPreset.standard => 'Standard',
+    FleetPreset.large => 'Large',
+  };
+
+  /// The ship lengths as a readable list, e.g. `4, 3, 3, 2, 2`.
+  String get shipSummary => shipLengths.join(', ');
+
   /// Parses a wire value, falling back to [FleetPreset.standard].
   static FleetPreset fromWire(String? value) {
     final String key = (value ?? '').toUpperCase();

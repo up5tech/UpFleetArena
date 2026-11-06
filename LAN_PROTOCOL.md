@@ -329,6 +329,68 @@ projection per recipient through `ProjectionBuilder`:
 
 The Host badge comes from the Host, never from the client's own bookkeeping.
 
+## 8.3 Room settings
+
+Only the Host changes the room settings. The Host device applies them
+locally; a `room:config:update` command is accepted only from a session
+bound to the Host player ID.
+
+```json
+{
+  "messageType": "room:config:update",
+  "requestId": "local-uuid",
+  "payload": {
+    "config": {
+      "rows": 10,
+      "columns": 10,
+      "fleetPreset": "STANDARD",
+      "maxPlayers": 6,
+      "placementDurationSeconds": 120,
+      "turnDurationSeconds": 30
+    }
+  }
+}
+```
+
+| Field | Limits |
+|---|---|
+| `rows` | 8–14 |
+| `columns` | 8–14 |
+| `fleetPreset` | `SMALL` `[3,2,2]`, `STANDARD` `[4,3,3,2,2]`, `LARGE` `[5,4,3,3,2,2]` |
+| `maxPlayers` | 2–6 and never below the number of seated players |
+| `placementDurationSeconds` | 60–180 |
+| `turnDurationSeconds` | 15–60 |
+
+The Host validates the command in this order and answers with the first
+failure:
+
+1. the sender is the Host → `HOST_ONLY_ACTION`
+2. the room is still in the lobby → `ROOM_ALREADY_STARTED`
+3. the payload is well formed → `INVALID_ROOM_CONFIG`
+4. every value is inside its limits → `INVALID_ROOM_CONFIG`
+
+An accepted change is broadcast to every admitted client as
+`room:config-updated`:
+
+```json
+{
+  "messageType": "room:config-updated",
+  "payload": {
+    "config": { },
+    "stateVersion": 7,
+    "snapshot": { }
+  }
+}
+```
+
+- `config` is the accepted configuration.
+- `stateVersion` is the room state version after the change. It increases by
+  exactly one per accepted change.
+- `snapshot` is the per-recipient room projection (§8.2).
+
+A client never sends `room:config:update`: its own copy of the settings is
+read-only and only the Host sees the editing controls.
+
 ## 9. Heartbeats and host loss
 
 - The Host sends `host:heartbeat` approximately every 3 s. The event

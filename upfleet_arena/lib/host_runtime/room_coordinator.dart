@@ -457,26 +457,50 @@ class RoomCoordinator {
       return <String>['The room settings can no longer be changed.'];
     }
 
-    final List<String> problems = config.validate();
+    final List<String> problems = _configProblems(room, config);
     if (problems.isNotEmpty) return problems;
 
+    await _applyConfig(room, config);
+    return const <String>[];
+  }
+
+  /// Collects every reason the configuration cannot be accepted.
+  List<String> _configProblems(HostRoomState room, RoomConfig config) {
+    final List<String> problems = config.validate();
+    if (config.maxPlayers < room.seatedCount) {
+      problems.add(
+        'The capacity cannot be lower than the ${room.seatedCount} players '
+        'already seated in the room.',
+      );
+    }
+    return problems;
+  }
+
+  /// Stores the accepted configuration and tells every client about it.
+  Future<void> _applyConfig(HostRoomState room, RoomConfig config) async {
     room.config = config;
     room.stateVersion++;
+    await _broadcastConfig(room);
+    _emitHostSnapshot();
+  }
 
+  /// Sends the accepted configuration to every admitted client.
+  ///
+  /// Each client receives its own projection (PLAN.md §6.6).
+  Future<void> _broadcastConfig(HostRoomState room) async {
     for (final ClientSession client in registry.admittedSessions.toList()) {
       await _transport?.send(
         client.connectionId,
         ProtocolMessage(
           messageType: HostEventType.configUpdated,
           payload: <String, dynamic>{
-            'config': config.toJson(),
+            'config': room.config.toJson(),
+            'stateVersion': room.stateVersion,
             'snapshot': projections.buildFor(room, client.playerId).toJson(),
           },
         ),
       );
     }
-    _emitHostSnapshot();
-    return const <String>[];
   }
 
   Future<void> _handleConfigUpdate(
@@ -529,7 +553,7 @@ class RoomCoordinator {
       return;
     }
 
-    final List<String> problems = parsed.validate();
+    final List<String> problems = _configProblems(room, parsed);
     if (problems.isNotEmpty) {
       await _sendError(
         session,
@@ -540,22 +564,7 @@ class RoomCoordinator {
       return;
     }
 
-    room.config = parsed;
-    room.stateVersion++;
-
-    for (final ClientSession client in registry.admittedSessions.toList()) {
-      await _transport?.send(
-        client.connectionId,
-        ProtocolMessage(
-          messageType: HostEventType.configUpdated,
-          payload: <String, dynamic>{
-            'config': parsed.toJson(),
-            'snapshot': projections.buildFor(room, client.playerId).toJson(),
-          },
-        ),
-      );
-    }
-    _emitHostSnapshot();
+    await _applyConfig(room, parsed);
   }
 
   // ----------------------------------------------------------- heartbeat

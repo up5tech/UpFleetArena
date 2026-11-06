@@ -30,6 +30,8 @@ dependencies:
 
   # Hashing of resume tokens (plan §12). The raw token is never stored.
   crypto: ^3.0.0
+  # Native share sheet for the room invitation (plan §5.2 Lobby).
+  share_plus: ^13.3.1
 
 dev_dependencies:
   flutter_test:

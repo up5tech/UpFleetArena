@@ -216,6 +216,17 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
   }
 
+  /// Applies new room settings. Host only.
+  ///
+  /// The Host runtime validates the values and broadcasts the accepted ones
+  /// to every client. Returns the validation problems, or an empty list on
+  /// success.
+  Future<List<String>> updateConfig(RoomConfig config) async {
+    final HostRoomService? service = _hostService;
+    if (service == null) return const <String>[];
+    return service.coordinator.hostUpdateConfig(config);
+  }
+
   /// Removes a player from the room. Host only.
   Future<void> kick(String playerId) async {
     final HostRoomService? service = _hostService;

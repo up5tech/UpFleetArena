@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/models/room_models.dart';
@@ -9,9 +10,9 @@ import '../../rooms/domain/room_session_controller.dart';
 
 /// The room lobby.
 ///
-/// It shows the member list with the Host badge and offers the actions the
-/// current role allows: kick and close for the Host, leave for everybody
-/// else (PLAN.md §3.1, §3.2).
+/// It shows the member list with the Host badge, the shared room settings and
+/// offers the actions the current role allows: kick and close for the Host,
+/// leave for everybody else (PLAN.md §3.1, §3.2).
 class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key});
 
@@ -100,6 +101,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            if (snapshot != null)
+              _SettingsCard(
+                config: snapshot.config,
+                isHost: session.isHost,
+                onEdit: () => context.push('/lobby/settings'),
+              ),
             const SizedBox(height: 12),
             if (session.isHost)
               _HostActions(
@@ -233,6 +241,13 @@ class _InviteCard extends StatelessWidget {
                   },
                   icon: const Icon(Icons.copy),
                 ),
+                Builder(
+                  builder: (BuildContext buttonContext) => IconButton(
+                    tooltip: 'Share the invitation',
+                    onPressed: () => _share(buttonContext, code),
+                    icon: const Icon(Icons.ios_share),
+                  ),
+                ),
               ],
             ),
             const Divider(height: 20),
@@ -252,6 +267,108 @@ class _InviteCard extends StatelessWidget {
                 height: 1.35,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Opens the system share sheet with the invitation details.
+  Future<void> _share(BuildContext context, String code) async {
+    final StringBuffer text = StringBuffer()
+      ..writeln('Join my UpFleet Arena room.')
+      ..writeln('Invitation code: $code');
+    if (session.hostAddresses.isNotEmpty) {
+      text.writeln(
+        'Manual address: ${session.hostAddresses.first}:${session.hostPort}',
+      );
+    }
+    text.write('Every player must be on the same Wi-Fi network.');
+
+    final RenderObject? renderObject = context.findRenderObject();
+    final Rect? origin = renderObject is RenderBox
+        ? renderObject.localToGlobal(Offset.zero) & renderObject.size
+        : null;
+
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: text.toString(),
+          subject: 'UpFleet Arena invitation',
+          sharePositionOrigin: origin,
+        ),
+      );
+    } on Object {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sharing is not available here.')),
+      );
+    }
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({
+    required this.config,
+    required this.isHost,
+    required this.onEdit,
+  });
+
+  final RoomConfig config;
+  final bool isHost;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    'Room settings',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (isHost)
+                  TextButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.tune, size: 18),
+                    label: const Text('Edit'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _KeyValue(label: 'Board', value: '${config.rows}×${config.columns}'),
+            _KeyValue(
+              label: 'Fleet',
+              value:
+                  '${config.fleetPreset.label} · ${config.fleetPreset.shipCount} '
+                  'ships (${config.fleetPreset.shipSummary})',
+            ),
+            _KeyValue(
+              label: 'Capacity',
+              value: 'up to ${config.maxPlayers} players',
+            ),
+            _KeyValue(
+              label: 'Timers',
+              value:
+                  '${config.placementDurationSeconds} s preparation · '
+                  '${config.turnDurationSeconds} s per turn',
+            ),
+            if (!isHost) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                'Only the host can change these settings.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.sunk,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -303,11 +420,24 @@ class _PlayerRow extends StatelessWidget {
                       ),
                   ],
                 ),
-                Text(
-                  _statusLabel(player.status),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: _statusColor(player.status),
-                  ),
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      _statusIcon(player.status),
+                      size: 13,
+                      color: _statusColor(player.status),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _statusLabel(player.status),
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: _statusColor(player.status),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -342,6 +472,14 @@ class _PlayerRow extends StatelessWidget {
     PlayerConnectionStatus.left => AppTheme.textSecondary,
     PlayerConnectionStatus.kicked => AppTheme.danger,
   };
+
+  static IconData _statusIcon(PlayerConnectionStatus status) =>
+      switch (status) {
+        PlayerConnectionStatus.connected => Icons.circle,
+        PlayerConnectionStatus.disconnected => Icons.link_off,
+        PlayerConnectionStatus.left => Icons.logout,
+        PlayerConnectionStatus.kicked => Icons.person_remove,
+      };
 }
 
 class _HostActions extends StatelessWidget {
