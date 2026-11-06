@@ -146,8 +146,8 @@ The discovery backend is still under evaluation — see
 | `room:player:kick` | Remove a lobby player | Sender is Host; target is a member; match not started |
 | `room:start-placement` | Start the preparation phase | Sender is Host; minimum player count; valid config |
 | `room:close` | Close room / end match | Sender is Host |
-| `placement:set` | Place or move a ship | Sender owns the board; placement phase active; placement valid |
-| `placement:auto` | Request automatic placement | Sender owns the board; placement phase active |
+| `placement:set` | Set the fleet layout | Sender owns the board; the room still accepts placements; layout valid |
+| `placement:auto` | Request automatic placement | Sender owns the board; the room still accepts placements |
 | `placement:ready` | Confirm a complete fleet | All ships placed legally |
 | `game:fire` | Fire at a coordinate | Active turn owner; living target; valid cell; no repeated shot |
 | `game:request-snapshot` | Request the current authorized state | Sender is still admitted to the room/match |
@@ -170,7 +170,7 @@ Phase 0 additionally defines `client:ping` as a transport probe, answered with
 | `room:config-updated` | New Host settings |
 | `room:closed` | Host explicitly closed the room or ended the match. Also sent to a single client that was removed from the room, with `reason: "kicked"` |
 | `placement:started` | Placement deadline and fleet profile |
-| `placement:state` | Caller-specific placement status |
+| `placement:state` | The exact fleet layout, sent to its owner only |
 | `placement:ready-state` | Public readiness projection |
 | `placement:completed` | Placement phase ended; match is starting |
 | `game:started` | Turn order and initial public match state |
@@ -390,6 +390,108 @@ An accepted change is broadcast to every admitted client as
 
 A client never sends `room:config:update`: its own copy of the settings is
 read-only and only the Host sees the editing controls.
+
+## 8.4 Fleet placement
+
+Every player prepares their own fleet. The Host owns the exact layout and
+sends it back to its owner only — no other client ever receives the
+coordinates of a ship (PLAN.md §8).
+
+Until Phase 4 starts the preparation phase, the fleet is prepared while the
+room is still in the lobby. The commands below are therefore accepted while
+the room is in the lobby and rejected with `PLACEMENT_PHASE_NOT_ACTIVE` once
+the room left it.
+
+### `placement:set`
+
+```json
+{
+  "messageType": "placement:set",
+  "requestId": "local-uuid",
+  "payload": {
+    "ships": [
+      {
+        "shipId": "ship-1",
+        "length": 4,
+        "orientation": "horizontal",
+        "row": 0,
+        "column": 0
+      }
+    ]
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `shipId` | The identifier of the ship, e.g. `ship-1`. Derived from the fleet preset |
+| `length` | The length of the ship in cells. It must match the preset |
+| `orientation` | `horizontal` or `vertical` |
+| `row`, `column` | The anchor cell of the ship: the leftmost cell of a horizontal ship, the topmost cell of a vertical one |
+
+The command carries the complete layout of the sender. The Host validates
+every ship of it and either accepts the whole layout or rejects the whole
+command:
+
+1. the sender is a room member → `NOT_ROOM_MEMBER`
+2. the room still accepts placements → `PLACEMENT_PHASE_NOT_ACTIVE`
+3. the payload is well formed → `INVALID_SHIP_PLACEMENT`
+4. every ship belongs to the fleet preset → `INVALID_SHIP_PLACEMENT`
+5. every ship is inside the board → `INVALID_SHIP_PLACEMENT`
+6. no two ships overlap → `INVALID_SHIP_PLACEMENT`
+
+Ships may touch each other; only an overlap is rejected. A layout may be
+incomplete — the player places the ships one by one.
+
+### `placement:auto`
+
+Asks the Host to place the whole fleet with the automatic algorithm. The
+Host owns the random source and answers with the resulting layout.
+
+### `placement:ready`
+
+Confirms the fleet. The Host checks that every ship of the preset is placed
+and legal, then marks the player as ready. An incomplete fleet is rejected
+with `FLEET_INCOMPLETE`.
+
+Changing the fleet clears the confirmation, so a player never stays ready
+with a layout the Host did not accept.
+
+### `placement:state`
+
+The answer to every placement command, sent to the owner of the fleet only:
+
+```json
+{
+  "messageType": "placement:state",
+  "payload": {
+    "playerId": "player-uuid",
+    "ships": [ ],
+    "ready": false,
+    "stateVersion": 12
+  }
+}
+```
+
+### `placement:ready-state`
+
+The readiness of every member, sent to everybody. It carries no
+coordinates:
+
+```json
+{
+  "messageType": "placement:ready-state",
+  "payload": {
+    "players": [
+      { "playerId": "player-uuid", "displayName": "Alice", "ready": true }
+    ],
+    "stateVersion": 12
+  }
+}
+```
+
+A new board size or a new fleet preset invalidates every stored layout: the
+Host clears the layouts and the confirmations.
 
 ## 9. Heartbeats and host loss
 

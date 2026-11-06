@@ -109,6 +109,16 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 onEdit: () => context.push('/lobby/settings'),
               ),
             const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/placement'),
+              icon: const Icon(Icons.grid_view_outlined, size: 18),
+              label: Text(
+                session.isPlacementReady
+                    ? 'Your fleet is ready'
+                    : 'Prepare your fleet',
+              ),
+            ),
+            const SizedBox(height: 12),
             if (session.isHost)
               _HostActions(
                 onClose: () => _closeRoom(context),
@@ -446,6 +456,12 @@ class _PlayerRow extends StatelessWidget {
             const Chip(
               label: Text('Host'),
               avatar: Icon(Icons.star, size: 16, color: AppTheme.sunk),
+              visualDensity: VisualDensity.compact,
+            ),
+          if (player.ready)
+            const Chip(
+              label: Text('Ready'),
+              avatar: Icon(Icons.check, size: 16, color: AppTheme.accent),
               visualDensity: VisualDensity.compact,
             ),
           if (canKick)

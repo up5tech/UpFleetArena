@@ -59,14 +59,14 @@ class HomeScreen extends StatelessWidget {
             _PhaseEntry(
               icon: Icons.people_outline,
               title: 'Lobby',
-              subtitle: 'Phase 1 — player list, host badge, kick and close',
+              subtitle: 'Reached from Create Room or Join Room',
               enabled: false,
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.grid_view_outlined,
               title: 'Ship Placement',
-              subtitle: 'Phase 3 — private board and fleet placement',
+              subtitle: 'Reached from the lobby — private board and fleet',
               enabled: false,
             ),
             const SizedBox(height: 8),

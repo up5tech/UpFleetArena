@@ -317,6 +317,23 @@ class PlayerSummary {
   /// Whether this member is the Host.
   bool get isHost => role == PlayerRole.host;
 
+  /// Returns a copy with the given fields replaced.
+  PlayerSummary copyWith({
+    String? playerId,
+    String? displayName,
+    String? avatarId,
+    PlayerRole? role,
+    PlayerConnectionStatus? status,
+    bool? ready,
+  }) => PlayerSummary(
+    playerId: playerId ?? this.playerId,
+    displayName: displayName ?? this.displayName,
+    avatarId: avatarId ?? this.avatarId,
+    role: role ?? this.role,
+    status: status ?? this.status,
+    ready: ready ?? this.ready,
+  );
+
   /// Serializes the summary.
   Map<String, dynamic> toJson() => <String, dynamic>{
     'playerId': playerId,

@@ -1,9 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
 import '../core/utils/secure_random.dart';
+import '../game_engine/board/board.dart';
+import '../game_engine/fleet/fleet_profile.dart';
+import '../game_engine/placement/auto_placement.dart';
+import '../game_engine/placement/placement.dart';
+import '../game_engine/placement/placement_validator.dart';
+import '../shared/models/placement_models.dart';
 import '../shared/models/room_models.dart';
 import '../shared/protocol/protocol_constants.dart';
 import '../shared/protocol/protocol_message.dart';
@@ -34,6 +41,10 @@ class RoomCoordinator {
   final ProjectionBuilder projections;
   final StreamController<RoomSnapshot> _hostSnapshots =
       StreamController<RoomSnapshot>.broadcast();
+  final StreamController<PlacementState> _hostPlacementStates =
+      StreamController<PlacementState>.broadcast();
+  final StreamController<ReadinessState> _hostReadinessStates =
+      StreamController<ReadinessState>.broadcast();
 
   HostRoomState? _state;
   RoomTransport? _transport;
@@ -53,6 +64,13 @@ class RoomCoordinator {
   /// The Host does not connect to itself over TCP; its UI reads the room
   /// state through this stream.
   Stream<RoomSnapshot> get hostSnapshots => _hostSnapshots.stream;
+
+  /// The Host's own fleet layout.
+  Stream<PlacementState> get hostPlacementStates => _hostPlacementStates.stream;
+
+  /// The readiness of every member, as everybody may see it.
+  Stream<ReadinessState> get hostReadinessStates =>
+      _hostReadinessStates.stream;
 
   /// Connects the coordinator to a transport.
   ///
@@ -126,6 +144,12 @@ class RoomCoordinator {
         await _handleClose(session, message);
       case ClientMessageType.configUpdate:
         await _handleConfigUpdate(session, message);
+      case ClientMessageType.placementSet:
+        await _handlePlacementSet(session, message);
+      case ClientMessageType.placementAuto:
+        await _handlePlacementAuto(session, message);
+      case ClientMessageType.placementReady:
+        await _handlePlacementReady(session, message);
       case ClientMessageType.requestSnapshot:
         await _handleSnapshotRequest(session, message);
       case ClientMessageType.heartbeat:
@@ -258,6 +282,8 @@ class RoomCoordinator {
     );
 
     await _broadcastRoomState(room);
+    await _sendPlacementState(room, playerId);
+    await _broadcastReadiness(room);
     _emitHostSnapshot();
   }
 
@@ -286,8 +312,10 @@ class RoomCoordinator {
 
     player.status = PlayerConnectionStatus.left;
     room.stateVersion++;
+    room.placements.remove(playerId);
 
     await _broadcastRoomState(room);
+    await _broadcastReadiness(room);
     _emitHostSnapshot();
     await _transport?.closeConnection(session.connectionId);
   }
@@ -309,6 +337,7 @@ class RoomCoordinator {
 
     target.status = PlayerConnectionStatus.kicked;
     room.stateVersion++;
+    room.placements.remove(target.playerId);
 
     final ClientSession? targetSession = registry.byPlayerId(target.playerId);
     if (targetSession != null) {
@@ -326,6 +355,7 @@ class RoomCoordinator {
     }
 
     await _broadcastRoomState(room);
+    await _broadcastReadiness(room);
     _emitHostSnapshot();
   }
 
@@ -369,6 +399,7 @@ class RoomCoordinator {
 
     target.status = PlayerConnectionStatus.kicked;
     room.stateVersion++;
+    room.placements.remove(target.playerId);
 
     final ClientSession? targetSession = registry.byPlayerId(target.playerId);
     if (targetSession != null) {
@@ -386,6 +417,7 @@ class RoomCoordinator {
     }
 
     await _broadcastRoomState(room);
+    await _broadcastReadiness(room);
     _emitHostSnapshot();
   }
 
@@ -478,8 +510,38 @@ class RoomCoordinator {
 
   /// Stores the accepted configuration and tells every client about it.
   Future<void> _applyConfig(HostRoomState room, RoomConfig config) async {
+    // A new board size or a new fleet invalidates every layout that was
+    // placed on the old one.
+    final bool invalidatesLayouts =
+        config.rows != room.config.rows ||
+        config.columns != room.config.columns ||
+        config.fleetPreset != room.config.fleetPreset;
+
     room.config = config;
     room.stateVersion++;
+
+    if (invalidatesLayouts) {
+      for (final HostPlayerPlacement placement in room.placements.values) {
+        placement.ships.clear();
+        placement.ready = false;
+      }
+      // The clients keep showing their own board, so they have to receive the
+      // cleared layout as well.
+      for (final ClientSession client in registry.admittedSessions.toList()) {
+        final String? playerId = client.playerId;
+        if (playerId == null) continue;
+        await _transport?.send(
+          client.connectionId,
+          ProtocolMessage(
+            messageType: HostEventType.placementState,
+            payload: _placementState(room, playerId).toJson(),
+          ),
+        );
+      }
+      await _broadcastReadiness(room);
+      _emitHostPlacementState(room);
+    }
+
     await _broadcastConfig(room);
     _emitHostSnapshot();
   }
@@ -567,6 +629,336 @@ class RoomCoordinator {
     await _applyConfig(room, parsed);
   }
 
+  // ----------------------------------------------------------- placement
+
+  /// The fleet layout of one member.
+  ///
+  /// The entry is created on first use, so a player that never placed a ship
+  /// still shows up as "not ready".
+  HostPlayerPlacement placementFor(String playerId) {
+    final HostRoomState? room = _state;
+    if (room == null) return HostPlayerPlacement(playerId: playerId);
+    return room.placements.putIfAbsent(
+      playerId,
+      () => HostPlayerPlacement(playerId: playerId),
+    );
+  }
+
+  /// The fleet profile the room currently asks for.
+  FleetProfile _profile(HostRoomState room) =>
+      FleetProfile.fromPreset(room.config.fleetPreset);
+
+  /// The board the room currently uses.
+  BoardSize _board(HostRoomState room) =>
+      BoardSize(rows: room.config.rows, columns: room.config.columns);
+
+  /// Applies a fleet layout as the Host device.
+  ///
+  /// Returns the validation problems, or an empty list on success.
+  Future<List<String>> hostSetPlacement(List<ShipPlacement> ships) async {
+    final HostRoomState? room = _state;
+    if (room == null) return const <String>[];
+    if (room.status != RoomStatus.lobby) {
+      return <String>['The fleets cannot be changed any more.'];
+    }
+
+    final PlacementError? error = validateFleetLayout(
+      board: _board(room),
+      profile: _profile(room),
+      ships: ships,
+    );
+    if (error != null) return <String>[error.message];
+
+    await _applyLayout(room, room.hostPlayerId, ships);
+    return const <String>[];
+  }
+
+  /// Places the Host's own fleet automatically.
+  Future<List<String>> hostAutoPlace() async {
+    final HostRoomState? room = _state;
+    if (room == null) return const <String>[];
+    if (room.status != RoomStatus.lobby) {
+      return <String>['The fleets cannot be changed any more.'];
+    }
+    await _autoPlace(room, room.hostPlayerId);
+    return const <String>[];
+  }
+
+  /// Confirms the Host's own fleet.
+  Future<List<String>> hostSetReady() async {
+    final HostRoomState? room = _state;
+    if (room == null) return const <String>[];
+    return _confirmReady(room, room.hostPlayerId);
+  }
+
+  Future<void> _handlePlacementSet(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+
+    final String? playerId = session.playerId;
+    if (playerId == null) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.notRoomMember,
+        'You are not a member of this room.',
+      );
+      return;
+    }
+    if (room.status != RoomStatus.lobby) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.placementPhaseNotActive,
+        'The fleets cannot be changed any more.',
+      );
+      return;
+    }
+
+    final Object? rawShips = message.payload['ships'];
+    if (rawShips is! List) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.invalidShipPlacement,
+        'The fleet layout was malformed.',
+      );
+      return;
+    }
+
+    final List<ShipPlacement> ships = <ShipPlacement>[];
+    for (final Object? entry in rawShips) {
+      if (entry is! Map<String, dynamic>) {
+        await _sendError(
+          session,
+          message,
+          ProtocolErrorCode.invalidShipPlacement,
+          'The fleet layout was malformed.',
+        );
+        return;
+      }
+      ships.add(
+        ShipLayout.fromJson(entry).toPlacement(),
+      );
+    }
+
+    final PlacementError? error = validateFleetLayout(
+      board: _board(room),
+      profile: _profile(room),
+      ships: ships,
+    );
+    if (error != null) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.invalidShipPlacement,
+        error.message,
+      );
+      await _sendPlacementState(room, playerId);
+      return;
+    }
+
+    await _applyLayout(room, playerId, ships);
+  }
+
+  Future<void> _handlePlacementAuto(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+
+    final String? playerId = session.playerId;
+    if (playerId == null) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.notRoomMember,
+        'You are not a member of this room.',
+      );
+      return;
+    }
+    if (room.status != RoomStatus.lobby) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.placementPhaseNotActive,
+        'The fleets cannot be changed any more.',
+      );
+      return;
+    }
+
+    await _autoPlace(room, playerId);
+  }
+
+  Future<void> _handlePlacementReady(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return;
+
+    final String? playerId = session.playerId;
+    if (playerId == null) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.notRoomMember,
+        'You are not a member of this room.',
+      );
+      return;
+    }
+    if (room.status != RoomStatus.lobby) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.placementPhaseNotActive,
+        'The fleets cannot be changed any more.',
+      );
+      return;
+    }
+
+    final List<String> problems = await _confirmReady(room, playerId);
+    if (problems.isNotEmpty) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.fleetIncomplete,
+        problems.join(' '),
+      );
+    }
+  }
+
+  /// Stores a validated fleet layout and tells everybody about it.
+  Future<void> _applyLayout(
+    HostRoomState room,
+    String playerId,
+    List<ShipPlacement> ships,
+  ) async {
+    final HostPlayerPlacement placement = placementFor(playerId);
+    final bool wasReady = placement.ready;
+
+    placement.ships
+      ..clear()
+      ..addEntries(
+        ships.map(
+          (ShipPlacement ship) =>
+              MapEntry<String, ShipPlacement>(ship.shipId, ship),
+        ),
+      );
+    // Changing the fleet invalidates the confirmation.
+    placement.ready = false;
+
+    room.stateVersion++;
+    await _sendPlacementState(room, playerId);
+    if (wasReady) await _broadcastReadiness(room);
+  }
+
+  /// Places the fleet of a member automatically.
+  Future<void> _autoPlace(HostRoomState room, String playerId) async {
+    final List<ShipPlacement> ships = autoPlaceFleet(
+      board: _board(room),
+      profile: _profile(room),
+      random: Random(),
+    );
+    await _applyLayout(room, playerId, ships);
+  }
+
+  /// Confirms a complete fleet.
+  Future<List<String>> _confirmReady(
+    HostRoomState room,
+    String playerId,
+  ) async {
+    final HostPlayerPlacement placement = placementFor(playerId);
+    final List<ShipPlacement> ships = placement.ships.values.toList();
+
+    if (!isFleetComplete(_profile(room), ships)) {
+      return <String>['Place every ship before you are ready.'];
+    }
+
+    final PlacementError? error = validateFleetLayout(
+      board: _board(room),
+      profile: _profile(room),
+      ships: ships,
+    );
+    if (error != null) return <String>[error.message];
+
+    placement.ready = true;
+    room.stateVersion++;
+    await _sendPlacementState(room, playerId);
+    await _broadcastReadiness(room);
+    return const <String>[];
+  }
+
+  /// Sends the exact fleet layout to its owner only.
+  Future<void> _sendPlacementState(
+    HostRoomState room,
+    String playerId,
+  ) async {
+    final PlacementState state = _placementState(room, playerId);
+
+    final ClientSession? session = registry.byPlayerId(playerId);
+    if (session != null) {
+      await _transport?.send(
+        session.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.placementState,
+          payload: state.toJson(),
+        ),
+      );
+    }
+    _emitHostPlacementState(room);
+  }
+
+  /// Tells everybody which members confirmed their fleet.
+  ///
+  /// The event carries no coordinates: the layout of a player stays private.
+  Future<void> _broadcastReadiness(HostRoomState room) async {
+    final ReadinessState state = _readinessState(room);
+
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.placementReadyState,
+          payload: state.toJson(),
+        ),
+      );
+    }
+    _emitHostReadinessState(room);
+  }
+
+  PlacementState _placementState(HostRoomState room, String playerId) {
+    final HostPlayerPlacement placement = placementFor(playerId);
+    return PlacementState(
+      playerId: playerId,
+      ships: placement.ships.values
+          .map(ShipLayout.fromPlacement)
+          .toList(),
+      ready: placement.ready,
+      stateVersion: room.stateVersion,
+    );
+  }
+
+  ReadinessState _readinessState(HostRoomState room) {
+    return ReadinessState(
+      players: room.orderedPlayers
+          .where((HostPlayer player) => player.occupiesSeat)
+          .map(
+            (HostPlayer player) => PlayerReadiness(
+              playerId: player.playerId,
+              displayName: player.displayName,
+              ready: room.placements[player.playerId]?.ready ?? false,
+            ),
+          )
+          .toList(),
+      stateVersion: room.stateVersion,
+    );
+  }
+
   // ----------------------------------------------------------- heartbeat
 
   void _handleHeartbeat(ClientSession session) {
@@ -636,6 +1028,16 @@ class RoomCoordinator {
     _hostSnapshots.add(projections.buildFor(room, room.hostPlayerId));
   }
 
+  void _emitHostPlacementState(HostRoomState room) {
+    if (_hostPlacementStates.isClosed) return;
+    _hostPlacementStates.add(_placementState(room, room.hostPlayerId));
+  }
+
+  void _emitHostReadinessState(HostRoomState room) {
+    if (_hostReadinessStates.isClosed) return;
+    _hostReadinessStates.add(_readinessState(room));
+  }
+
   Future<void> _sendError(
     ClientSession session,
     ProtocolMessage request,
@@ -658,6 +1060,8 @@ class RoomCoordinator {
   /// Releases the resources held by the coordinator.
   Future<void> dispose() async {
     await _hostSnapshots.close();
+    await _hostPlacementStates.close();
+    await _hostReadinessStates.close();
     registry.clear();
     _state = null;
   }

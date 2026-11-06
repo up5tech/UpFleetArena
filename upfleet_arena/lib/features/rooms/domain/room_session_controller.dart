@@ -5,9 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
+import '../../../game_engine/placement/placement.dart';
 import '../../../host_runtime/host_room_service.dart';
 import '../../../host_runtime/room_coordinator.dart';
+import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
+import '../../../shared/protocol/protocol_constants.dart';
 import '../../lan_networking/domain/lan_discovery.dart';
 import '../../lan_networking/domain/lan_networking_providers.dart';
 import '../../profile/domain/profile.dart';
@@ -57,6 +60,9 @@ class RoomSessionState {
     this.errorMessage,
     this.hostPort,
     this.hostAddresses = const <String>[],
+    this.placement,
+    this.readiness,
+    this.placementError,
   });
 
   /// Whether this device hosts, joined, or is outside a room.
@@ -89,11 +95,26 @@ class RoomSessionState {
   /// The Host's local IPv4 addresses, shown for the manual fallback.
   final List<String> hostAddresses;
 
+  /// The exact fleet layout of this device, confirmed by the Host.
+  final PlacementState? placement;
+
+  /// The readiness of every member.
+  final ReadinessState? readiness;
+
+  /// The last rejection of a placement command.
+  ///
+  /// A rejected placement never ends the room: it only tells the player that
+  /// the layout was not accepted.
+  final String? placementError;
+
   /// Whether this device hosts the room.
   bool get isHost => role == RoomRole.host;
 
   /// Whether the device is a member of a room.
   bool get isInRoom => status == RoomSessionStatus.inRoom;
+
+  /// Whether this device confirmed a complete fleet.
+  bool get isPlacementReady => placement?.ready ?? false;
 
   /// Returns a copy with the given fields replaced.
   ///
@@ -110,6 +131,9 @@ class RoomSessionState {
     Object? errorMessage = _unset,
     Object? hostPort = _unset,
     List<String>? hostAddresses,
+    Object? placement = _unset,
+    Object? readiness = _unset,
+    Object? placementError = _unset,
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
@@ -122,6 +146,11 @@ class RoomSessionState {
         identical(errorMessage, _unset) ? this.errorMessage : errorMessage as String?,
     hostPort: identical(hostPort, _unset) ? this.hostPort : hostPort as int?,
     hostAddresses: hostAddresses ?? this.hostAddresses,
+    placement: identical(placement, _unset) ? this.placement : placement as PlacementState?,
+    readiness: identical(readiness, _unset) ? this.readiness : readiness as ReadinessState?,
+    placementError: identical(placementError, _unset)
+        ? this.placementError
+        : placementError as String?,
   );
 
   static const Object _unset = Object();
@@ -137,6 +166,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   StreamSubscription<RoomSnapshot>? _hostSubscription;
   StreamSubscription<RoomSnapshot>? _clientSubscription;
   StreamSubscription<RoomClientEvent>? _eventSubscription;
+  StreamSubscription<PlacementState>? _hostPlacementSubscription;
+  StreamSubscription<ReadinessState>? _hostReadinessSubscription;
+  StreamSubscription<PlacementState>? _clientPlacementSubscription;
+  StreamSubscription<ReadinessState>? _clientReadinessSubscription;
 
   @override
   RoomSessionState build() {
@@ -196,6 +229,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         },
       );
 
+      _hostPlacementSubscription = service.coordinator.hostPlacementStates
+          .listen((PlacementState placement) {
+            state = state.copyWith(placement: placement);
+          });
+
+      _hostReadinessSubscription = service.coordinator.hostReadinessStates
+          .listen((ReadinessState readiness) {
+            state = state.copyWith(readiness: readiness);
+          });
+
       state = state.copyWith(
         status: RoomSessionStatus.inRoom,
         inviteCode: service.coordinator.inviteCode,
@@ -225,6 +268,43 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     final HostRoomService? service = _hostService;
     if (service == null) return const <String>[];
     return service.coordinator.hostUpdateConfig(config);
+  }
+
+  /// Sends a fleet layout to the Host.
+  ///
+  /// The Host validates the layout and answers with the accepted fleet, so
+  /// the UI always shows the Host truth. Returns the validation problems of
+  /// the local Host runtime, or an empty list when the command was sent.
+  Future<List<String>> setPlacement(List<ShipPlacement> ships) async {
+    final HostRoomService? service = _hostService;
+    if (service != null) {
+      return service.coordinator.hostSetPlacement(ships);
+    }
+    _clientSession?.setPlacement(ships);
+    return const <String>[];
+  }
+
+  /// Asks the Host to place the fleet automatically.
+  Future<void> autoPlace() async {
+    final HostRoomService? service = _hostService;
+    if (service != null) {
+      await service.coordinator.hostAutoPlace();
+      return;
+    }
+    _clientSession?.autoPlace();
+  }
+
+  /// Confirms the fleet to the Host.
+  ///
+  /// Returns the validation problems of the local Host runtime, or an empty
+  /// list when the command was sent.
+  Future<List<String>> setPlacementReady() async {
+    final HostRoomService? service = _hostService;
+    if (service != null) {
+      return service.coordinator.hostSetReady();
+    }
+    _clientSession?.setReady();
+    return const <String>[];
   }
 
   /// Removes a player from the room. Host only.
@@ -321,6 +401,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _clientSubscription = session.snapshots.listen((RoomSnapshot snapshot) {
       state = state.copyWith(snapshot: snapshot);
     });
+    _clientPlacementSubscription = session.placementStates.listen(
+      (PlacementState placement) {
+        state = state.copyWith(placement: placement);
+      },
+    );
+    _clientReadinessSubscription = session.readinessStates.listen(
+      (ReadinessState readiness) {
+        state = state.copyWith(readiness: readiness);
+      },
+    );
     _eventSubscription = session.events.listen((RoomClientEvent event) {
       switch (event) {
         case RoomJoinedEvent(:final String roomId):
@@ -335,6 +425,11 @@ class RoomSessionController extends Notifier<RoomSessionState> {
             errorMessage: message,
           );
         case RoomErrorEvent(:final String code, :final String message):
+          if (_placementErrorCodes.contains(code)) {
+            // A rejected placement only concerns the fleet: the room stays.
+            state = state.copyWith(placementError: message);
+            break;
+          }
           state = state.copyWith(
             status: RoomSessionStatus.failed,
             errorCode: code,
@@ -406,6 +501,14 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _clientSubscription = null;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
+    await _hostPlacementSubscription?.cancel();
+    _hostPlacementSubscription = null;
+    await _hostReadinessSubscription?.cancel();
+    _hostReadinessSubscription = null;
+    await _clientPlacementSubscription?.cancel();
+    _clientPlacementSubscription = null;
+    await _clientReadinessSubscription?.cancel();
+    _clientReadinessSubscription = null;
 
     final HostRoomService? service = _hostService;
     _hostService = null;
@@ -436,6 +539,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
   }
 }
+
+/// The error codes that only concern the fleet placement.
+///
+/// They never end the room: the player simply has to try again
+/// (PLAN.md §9.1).
+const Set<String> _placementErrorCodes = <String>{
+  ProtocolErrorCode.invalidShipPlacement,
+  ProtocolErrorCode.fleetIncomplete,
+  ProtocolErrorCode.placementPhaseNotActive,
+};
 
 /// The current room session.
 final roomSessionControllerProvider =

@@ -1,3 +1,4 @@
+import '../../game_engine/placement/placement.dart';
 import '../../shared/models/room_models.dart';
 
 /// The Host-side authoritative record of a room member.
@@ -69,6 +70,23 @@ class HostPlayer {
   );
 }
 
+/// The Host-side placement state of one member.
+///
+/// The exact fleet layout never leaves the Host runtime: it is sent to its
+/// owner only (PLAN.md §6.6, §8).
+class HostPlayerPlacement {
+  HostPlayerPlacement({required this.playerId});
+
+  /// The member the placement belongs to.
+  final String playerId;
+
+  /// The ships that are placed on the board, keyed by the ship identifier.
+  final Map<String, ShipPlacement> ships = <String, ShipPlacement>{};
+
+  /// Whether the member confirmed a complete fleet.
+  bool ready = false;
+}
+
 /// The Host-side authoritative room state.
 ///
 /// It lives in Host memory only and disappears when the Host process ends
@@ -82,9 +100,11 @@ class HostRoomState {
     required this.createdAt,
     required this.hostTcpPort,
     Map<String, HostPlayer>? players,
+    Map<String, HostPlayerPlacement>? placements,
     this.status = RoomStatus.lobby,
     this.stateVersion = 1,
-  }) : players = players ?? <String, HostPlayer>{};
+  }) : players = players ?? <String, HostPlayer>{},
+       placements = placements ?? <String, HostPlayerPlacement>{};
 
   /// Locally generated room identifier.
   final String roomId;
@@ -109,6 +129,9 @@ class HostRoomState {
   /// Members, keyed by player ID.
   final Map<String, HostPlayer> players;
 
+  /// The fleet layout of every member, keyed by player ID.
+  final Map<String, HostPlayerPlacement> placements;
+
   /// Current lifecycle phase.
   RoomStatus status;
 
@@ -118,6 +141,18 @@ class HostRoomState {
   /// Members that still occupy a seat.
   int get seatedCount =>
       players.values.where((HostPlayer p) => p.occupiesSeat).length;
+
+  /// The members in display order: the Host first, then by join time.
+  List<HostPlayer> get orderedPlayers {
+    final List<HostPlayer> ordered = players.values.toList()
+      ..sort((HostPlayer a, HostPlayer b) {
+        if (a.isHost != b.isHost) return a.isHost ? -1 : 1;
+        final int byTime = a.joinedAt.compareTo(b.joinedAt);
+        if (byTime != 0) return byTime;
+        return a.playerId.compareTo(b.playerId);
+      });
+    return ordered;
+  }
 
   /// Finds a member by ID.
   HostPlayer? playerById(String playerId) => players[playerId];

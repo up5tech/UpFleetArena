@@ -5,6 +5,7 @@ import '../features/home/presentation/home_screen.dart';
 import '../features/lan_lab/presentation/lan_lab_screen.dart';
 import '../features/lobby/presentation/host_settings_screen.dart';
 import '../features/lobby/presentation/lobby_screen.dart';
+import '../features/placement/presentation/placement_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/rooms/presentation/create_room_screen.dart';
 import '../features/rooms/presentation/join_room_screen.dart';
@@ -56,6 +57,12 @@ class AppRouter {
         name: 'host-settings',
         builder: (BuildContext context, GoRouterState state) =>
             const HostSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/placement',
+        name: 'placement',
+        builder: (BuildContext context, GoRouterState state) =>
+            const PlacementScreen(),
       ),
       GoRoute(
         path: '/lan-lab',

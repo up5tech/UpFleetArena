@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../../../game_engine/placement/placement.dart';
+import '../../../shared/models/placement_models.dart';
 import '../../../shared/models/room_models.dart';
 import '../../../shared/protocol/protocol_constants.dart';
 import '../../../shared/protocol/protocol_message.dart';
@@ -78,6 +80,10 @@ class RoomClientSession {
       StreamController<RoomSnapshot>.broadcast();
   final StreamController<RoomClientEvent> _events =
       StreamController<RoomClientEvent>.broadcast();
+  final StreamController<PlacementState> _placementStates =
+      StreamController<PlacementState>.broadcast();
+  final StreamController<ReadinessState> _readinessStates =
+      StreamController<ReadinessState>.broadcast();
 
   StreamSubscription<ProtocolMessage>? _frameSubscription;
   StreamSubscription<ProtocolError>? _errorSubscription;
@@ -107,6 +113,12 @@ class RoomClientSession {
 
   /// Session events.
   Stream<RoomClientEvent> get events => _events.stream;
+
+  /// The exact fleet layout of this client, sent by the Host.
+  Stream<PlacementState> get placementStates => _placementStates.stream;
+
+  /// The readiness of every member.
+  Stream<ReadinessState> get readinessStates => _readinessStates.stream;
 
   /// Connects to the Host and performs the join handshake.
   ///
@@ -197,6 +209,10 @@ class RoomClientSession {
         if (rawSnapshot is Map<String, dynamic>) {
           _snapshots.add(RoomSnapshot.fromJson(rawSnapshot));
         }
+      case HostEventType.placementState:
+        _placementStates.add(PlacementState.fromJson(message.payload));
+      case HostEventType.placementReadyState:
+        _readinessStates.add(ReadinessState.fromJson(message.payload));
       case HostEventType.closed:
         _events.add(
           RoomClosedEvent(
@@ -235,6 +251,43 @@ class RoomClientSession {
       ProtocolMessage(messageType: ClientMessageType.leave),
     );
     await close();
+  }
+
+  /// Sends the fleet layout to the Host.
+  ///
+  /// The Host validates the whole layout and answers with the accepted fleet
+  /// in a `placement:state` event.
+  void setPlacement(List<ShipPlacement> ships) {
+    if (!isConnected) return;
+    _transport.send(
+      ProtocolMessage(
+        messageType: ClientMessageType.placementSet,
+        payload: <String, dynamic>{
+          'ships': ships
+              .map(
+                (ShipPlacement ship) =>
+                    ShipLayout.fromPlacement(ship).toJson(),
+              )
+              .toList(),
+        },
+      ),
+    );
+  }
+
+  /// Asks the Host to place the fleet automatically.
+  void autoPlace() {
+    if (!isConnected) return;
+    _transport.send(
+      ProtocolMessage(messageType: ClientMessageType.placementAuto),
+    );
+  }
+
+  /// Confirms the fleet to the Host.
+  void setReady() {
+    if (!isConnected) return;
+    _transport.send(
+      ProtocolMessage(messageType: ClientMessageType.placementReady),
+    );
   }
 
   /// Sends a heartbeat to the Host.
@@ -283,6 +336,8 @@ class RoomClientSession {
     await _transport.close();
     await _snapshots.close();
     await _events.close();
+    await _placementStates.close();
+    await _readinessStates.close();
   }
 }
 

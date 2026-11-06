@@ -14,17 +14,12 @@ class ProjectionBuilder {
   /// Pass `null` for a view that is not bound to a player, such as a
   /// pre-join preview.
   RoomSnapshot buildFor(HostRoomState state, String? viewerPlayerId) {
-    final List<HostPlayer> ordered = state.players.values.toList()
-      ..sort((HostPlayer a, HostPlayer b) {
-        // The Host always comes first, then by join order.
-        if (a.isHost != b.isHost) return a.isHost ? -1 : 1;
-        final int byTime = a.joinedAt.compareTo(b.joinedAt);
-        if (byTime != 0) return byTime;
-        return a.playerId.compareTo(b.playerId);
-      });
-
-    final List<PlayerSummary> players = ordered
-        .map((HostPlayer player) => player.toSummary())
+    final List<PlayerSummary> players = state.orderedPlayers
+        .map(
+          (HostPlayer player) => player.toSummary().copyWith(
+            ready: state.placements[player.playerId]?.ready ?? false,
+          ),
+        )
         .toList();
 
     return RoomSnapshot(
