@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/settings/feedback_settings.dart';
 import '../../../shared/models/room_models.dart';
 import '../domain/profile.dart';
 import '../domain/profile_controller.dart';
@@ -60,6 +61,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final Profile profile = ref.watch(profileProvider);
+    final FeedbackSettings feedback = ref.watch(feedbackSettingsProvider);
+    final FeedbackSettingsController feedbackController = ref.read(
+      feedbackSettingsProvider.notifier,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Your profile')),
@@ -136,6 +141,47 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 .setAvatarId(avatar),
                           ),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Sound & effects',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Sound effects'),
+                      subtitle: const Text('Shot, hit and result sounds'),
+                      value: feedback.soundEnabled,
+                      onChanged: (bool value) =>
+                          feedbackController.setSoundEnabled(value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Haptic feedback'),
+                      subtitle: const Text('Vibration on shots and results'),
+                      value: feedback.hapticsEnabled,
+                      onChanged: (bool value) =>
+                          feedbackController.setHapticsEnabled(value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Reduce motion'),
+                      subtitle: const Text(
+                        'Shorten animations; the system setting is also honored',
+                      ),
+                      value: feedback.reducedMotion,
+                      onChanged: (bool value) =>
+                          feedbackController.setReducedMotion(value),
                     ),
                   ],
                 ),

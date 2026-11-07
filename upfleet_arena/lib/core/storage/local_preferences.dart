@@ -26,6 +26,9 @@ class LocalPreferences {
   static const String _avatarKey = 'profile.avatarId';
   static const String _deviceIdKey = 'device.id';
   static const String _lastRoomKey = 'room.last';
+  static const String _soundKey = 'settings.soundEnabled';
+  static const String _hapticsKey = 'settings.hapticsEnabled';
+  static const String _reducedMotionKey = 'settings.reducedMotion';
 
   /// The saved nickname, or `null` when the player has not chosen one.
   String? get nickname => _preferences.getString(_nicknameKey);
@@ -80,6 +83,38 @@ class LocalPreferences {
 
   /// Forgets the last joined room.
   Future<void> clearLastRoom() => _preferences.remove(_lastRoomKey);
+
+  /// Whether shot and result sound effects play. On by default.
+  bool get soundEnabled => _preferences.getBool(_soundKey) ?? true;
+
+  /// Persists the sound-effects preference.
+  Future<void> setSoundEnabled(bool value) =>
+      _preferences.setBool(_soundKey, value);
+
+  /// Whether haptic feedback plays. On by default.
+  bool get hapticsEnabled => _preferences.getBool(_hapticsKey) ?? true;
+
+  /// Persists the haptics preference.
+  Future<void> setHapticsEnabled(bool value) =>
+      _preferences.setBool(_hapticsKey, value);
+
+  /// Whether the player asked for reduced motion. Off by default; the OS
+  /// accessibility setting is honored on top of it (PLAN.md §5.5).
+  bool get reducedMotion => _preferences.getBool(_reducedMotionKey) ?? false;
+
+  /// Persists the reduced-motion preference.
+  Future<void> setReducedMotion(bool value) =>
+      _preferences.setBool(_reducedMotionKey, value);
+
+  /// The chosen language tag (`en`, `vi`), or `null` to follow the system.
+  String? get localeTag => _preferences.getString(_localeKey);
+
+  /// Persists the language choice; `null` restores system-following.
+  Future<void> setLocaleTag(String? value) => value == null
+      ? _preferences.remove(_localeKey)
+      : _preferences.setString(_localeKey, value);
+
+  static const String _localeKey = 'settings.locale';
 
   static final Random _random = Random.secure();
 
