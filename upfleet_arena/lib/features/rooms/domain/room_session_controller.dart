@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/services/screen_awake_service.dart';
 import '../../../game_engine/placement/placement.dart';
 import '../../../host_runtime/host_room_service.dart';
 import '../../../host_runtime/room_coordinator.dart';
@@ -243,6 +244,7 @@ class RoomSessionState {
 /// [HostRoomService], as a client it owns a [RoomClientSession].
 class RoomSessionController extends Notifier<RoomSessionState> {
   HostRoomService? _hostService;
+  ScreenAwakeService? _screenAwake;
   RoomClientSession? _clientSession;
   StreamSubscription<RoomSnapshot>? _hostSubscription;
   StreamSubscription<RoomSnapshot>? _clientSubscription;
@@ -395,6 +397,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         hostPort: port,
         hostAddresses: await _localIpv4Addresses(),
       );
+      // The Host must stay reachable: keep its screen awake while hosting.
+      final ScreenAwakeService screenAwake = ref.read(screenAwakeServiceProvider);
+      _screenAwake = screenAwake;
+      unawaited(screenAwake.enable());
     } on Object catch (error) {
       await service.stop();
       _hostService = null;
@@ -842,6 +848,12 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _submittedTurn = null;
     final HostRoomService? service = _hostService;
     _hostService = null;
+    final ScreenAwakeService? screenAwake = _screenAwake;
+    _screenAwake = null;
+    if (service != null) {
+      // Release the screen wakelock once the Host stops hosting.
+      unawaited(screenAwake?.disable());
+    }
     await service?.stop();
     await service?.coordinator.dispose();
 
