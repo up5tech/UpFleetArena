@@ -32,7 +32,10 @@ dependencies:
   crypto: ^3.0.0
   # Native share sheet for the room invitation (plan §5.2 Lobby).
   share_plus: ^13.3.1
+  # Keep the Host screen awake while hosting (plan §2.9, §15 Phase 8).
   wakelock_plus: ^1.8.2
+  # Shot and result sound effects (plan §15 Phase 8).
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -42,3 +45,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/sounds/

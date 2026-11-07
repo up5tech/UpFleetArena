@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:upfleet_arena/core/providers.dart';
+import 'package:upfleet_arena/core/services/match_feedback.dart';
+import 'package:upfleet_arena/core/storage/local_preferences.dart';
 import 'package:upfleet_arena/features/match/presentation/match_screen.dart';
 import 'package:upfleet_arena/features/match/widgets/battle_board.dart';
 import 'package:upfleet_arena/features/match/widgets/spectator_view.dart';
@@ -124,21 +128,39 @@ RoomSessionState _session({
   turnCountdown: Countdown(remainingSeconds: 22),
 );
 
+/// A sound player that records nothing and touches no audio backend, so the
+/// screen tests run without platform channels.
+class _NoopSoundPlayer implements SoundPlayer {
+  @override
+  Future<void> play(GameSound sound) async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
+late SharedPreferences _testPreferences;
+
 Widget _app(_FakeSessionController controller) {
   return ProviderScope(
     overrides: [
       roomSessionControllerProvider.overrideWith(() => controller),
+      localPreferencesProvider.overrideWithValue(
+        LocalPreferences.withInstance(_testPreferences),
+      ),
+      soundPlayerProvider.overrideWithValue(_NoopSoundPlayer()),
     ],
     child: const MaterialApp(home: MatchScreen()),
   );
 }
 
 void main() {
-  setUp(() {
+  setUp(() async {
     final TestWidgetsFlutterBinding binding =
         TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first.physicalSize = const Size(1200, 3000);
     binding.platformDispatcher.views.first.devicePixelRatio = 1;
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    _testPreferences = await SharedPreferences.getInstance();
     addTearDown(() {
       binding.platformDispatcher.views.first.resetPhysicalSize();
       binding.platformDispatcher.views.first.resetDevicePixelRatio();
@@ -347,6 +369,10 @@ void main() {
       ProviderScope(
         overrides: [
           roomSessionControllerProvider.overrideWith(() => controller),
+          localPreferencesProvider.overrideWithValue(
+            LocalPreferences.withInstance(_testPreferences),
+          ),
+          soundPlayerProvider.overrideWithValue(_NoopSoundPlayer()),
         ],
         child: MaterialApp.router(
           routerConfig: GoRouter(

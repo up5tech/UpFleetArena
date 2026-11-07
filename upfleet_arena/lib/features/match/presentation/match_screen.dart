@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/services/match_feedback.dart';
+import '../../../core/settings/feedback_settings.dart';
 import '../../../game_engine/board/board.dart';
 import '../../../game_engine/combat/combat.dart';
 import '../../../game_engine/placement/placement.dart';
@@ -27,7 +29,8 @@ class MatchScreen extends ConsumerStatefulWidget {
 
 class _MatchScreenState extends ConsumerState<MatchScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  TabController? _tabs;
+  bool? _tabsReducedMotion;
   String? _selectedTargetId;
   CellCoord? _selectedCell;
   Timer? _ticker;
@@ -43,7 +46,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
   @override
   void dispose() {
     _ticker?.cancel();
-    _tabs.dispose();
+    _tabs?.dispose();
     super.dispose();
   }
 
@@ -78,7 +81,39 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
           next.matchSnapshot?.targetById(_selectedTargetId ?? '')?.alive == false) {
         setState(() => _selectedCell = null);
       }
+
+      final MatchFeedback feedback = ref.read(matchFeedbackProvider);
+      final String viewer = next.playerId ?? '';
+      // A fresh shot the local player was involved in.
+      if (next.lastShot != null &&
+          !identical(previous?.lastShot, next.lastShot)) {
+        feedback.shotResolved(next.lastShot!, viewer);
+      }
+      // The Host broadcast the final result for the first time.
+      if (next.matchResult != null && previous?.matchResult == null) {
+        feedback.matchFinished(
+          won: next.matchResult!.winnerPlayerId == viewer,
+        );
+      }
     });
+
+    // Reduced motion shortens the tab transition to zero (PLAN.md §5.5).
+    final FeedbackSettings settings = ref.watch(feedbackSettingsProvider);
+    final bool reducedMotion = useReducedMotion(context, settings);
+    if (_tabs == null || _tabsReducedMotion != reducedMotion) {
+      final int index = _tabs?.index ?? 0;
+      _tabs?.dispose();
+      _tabs = TabController(
+        length: 3,
+        vsync: this,
+        initialIndex: index,
+        animationDuration: reducedMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 250),
+      );
+      _tabsReducedMotion = reducedMotion;
+    }
+    final TabController tabs = _tabs!;
     final bool isMyTurn = session.isInRoom && snapshot.winnerPlayerId == null &&
         snapshot.activePlayerId == session.playerId &&
         snapshot.playerById(session.playerId ?? '')?.alive == true;
@@ -95,7 +130,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       appBar: AppBar(
         title: const Text('The match'),
         bottom: TabBar(
-          controller: _tabs,
+          controller: tabs,
           tabs: <Widget>[
             Tab(text: spectating ? 'Spectating' : 'Battle'),
             const Tab(text: 'Your board'),
@@ -105,7 +140,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       ),
       body: SafeArea(
         child: TabBarView(
-          controller: _tabs,
+          controller: tabs,
           children: <Widget>[
             if (spectating)
               SpectatorView(snapshot: snapshot, session: session)
@@ -117,6 +152,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
                 remaining: remaining,
                 selectedTargetId: targetId,
                 selectedCell: _selectedCell,
+                reducedMotion: reducedMotion,
                 onTargetSelected: (String targetId) {
                   setState(() {
                     _selectedTargetId = targetId;
@@ -182,6 +218,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     final CellCoord? cell = _selectedCell;
     if (cell == null) return;
 
+    ref.read(matchFeedbackProvider).fire();
     setState(() => _selectedCell = null);
     await ref
         .read(roomSessionControllerProvider.notifier)
@@ -201,6 +238,7 @@ class _BattleTab extends StatelessWidget {
     required this.remaining,
     required this.selectedTargetId,
     required this.selectedCell,
+    required this.reducedMotion,
     required this.onTargetSelected,
     required this.onCellTapped,
     required this.onFire,
@@ -212,6 +250,7 @@ class _BattleTab extends StatelessWidget {
   final int? remaining;
   final String? selectedTargetId;
   final CellCoord? selectedCell;
+  final bool reducedMotion;
   final ValueChanged<String> onTargetSelected;
   final ValueChanged<CellCoord> onCellTapped;
   final VoidCallback onFire;
@@ -261,13 +300,21 @@ class _BattleTab extends StatelessWidget {
           remaining: remaining,
           turnNumber: snapshot.turnNumber,
         ),
-        if (session.lastShot != null) ...<Widget>[
-          const SizedBox(height: 12),
-          _FeedbackCard(
-            feedback: session.lastShot!,
-            viewerPlayerId: session.playerId,
-          ),
-        ],
+        AnimatedSwitcher(
+          duration: reducedMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          child: session.lastShot == null
+              ? const SizedBox.shrink(key: ValueKey<String>('no-shot'))
+              : Padding(
+                  key: ValueKey<ShotFeedback>(session.lastShot!),
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _FeedbackCard(
+                    feedback: session.lastShot!,
+                    viewerPlayerId: session.playerId,
+                  ),
+                ),
+        ),
         const SizedBox(height: 16),
         Text('Target', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
