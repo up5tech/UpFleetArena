@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
+import '../core/config/app_config.dart';
 import '../core/utils/secure_random.dart';
 import '../game_engine/board/board.dart';
 import '../game_engine/combat/combat.dart';
@@ -231,7 +232,21 @@ class RoomCoordinator {
   Future<void> handleMessage(
     ClientSession session,
     ProtocolMessage message,
-  ) => _serialize(() => _handleMessage(session, message));
+  ) => _serialize(() async {
+    try {
+      await _handleMessage(session, message);
+    } on Object {
+      // Never leak raw exception text. A malformed command is rejected with a
+      // stable code and the connection stays under Host control
+      // (PLAN.md §8.4, §12).
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.malformedPayload,
+        'That command could not be read.',
+      );
+    }
+  });
 
   Future<void> _handleMessage(
     ClientSession session,
@@ -277,6 +292,8 @@ class RoomCoordinator {
         await _handleSnapshotRequest(session, message);
       case ClientMessageType.heartbeat:
         _handleHeartbeat(session);
+      case ClientMessageType.resume:
+        await _handleResume(session, message);
       default:
         await _sendError(
           session,
@@ -314,9 +331,21 @@ class RoomCoordinator {
       return;
     }
 
+    if (session.failedJoinAttempts >= 5) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.rateLimited,
+        'Too many failed join attempts. The connection is being closed.',
+      );
+      await _transport?.closeConnection(session.connectionId);
+      return;
+    }
+
     final String code =
         (message.payload['code'] as String? ?? '').trim().toUpperCase();
     if (code.isEmpty || code != room.inviteCode) {
+      session.failedJoinAttempts++;
       await _sendError(
         session,
         message,
@@ -1746,10 +1775,182 @@ class RoomCoordinator {
     }
   }
 
+  // ----------------------------------------------------------- resume
+
+  /// Reclaims a temporarily disconnected seat with a resume token.
+  ///
+  /// The Host validates the token, the grace period and the room phase before
+  /// binding the new connection to the old player ID (PLAN.md §2.8). No Host
+  /// migration or election is ever performed (PLAN.md §2.9).
+  Future<void> _handleResume(
+    ClientSession session,
+    ProtocolMessage message,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null || room.status == RoomStatus.closed) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.roomNotFound,
+        'This room is no longer active.',
+      );
+      return;
+    }
+
+    final String token = (message.payload['resumeToken'] as String? ?? '').trim();
+    if (token.isEmpty) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'The resume token is missing or invalid.',
+      );
+      return;
+    }
+
+    HostPlayer? player;
+    for (final HostPlayer candidate in room.players.values) {
+      if (candidate.resumeTokenHash != null &&
+          candidate.resumeTokenHash == _hash(token)) {
+        player = candidate;
+        break;
+      }
+    }
+    if (player == null) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'The resume token is no longer valid.',
+      );
+      return;
+    }
+
+    final String? claimedPlayerId =
+        message.payload['playerId'] as String?;
+    if (claimedPlayerId != null && claimedPlayerId != player.playerId) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'The resume token does not match this player.',
+      );
+      return;
+    }
+
+    if (player.isHost) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'The host cannot be resumed.',
+      );
+      return;
+    }
+
+    final ClientSession? existing = registry.byPlayerId(player.playerId);
+    if (existing != null && !identical(existing, session) && !existing.closed) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.deviceAlreadyConnected,
+        'This seat is already connected.',
+      );
+      return;
+    }
+
+    if (player.status != PlayerConnectionStatus.disconnected) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'This seat is not awaiting reconnection.',
+      );
+      return;
+    }
+
+    final DateTime now = _now();
+    if (player.disconnectDeadline != null &&
+        now.isAfter(player.disconnectDeadline!)) {
+      await _sendError(
+        session,
+        message,
+        ProtocolErrorCode.sessionExpired,
+        'The reconnection grace period has expired.',
+      );
+      return;
+    }
+
+    // Bind the new connection to the existing player identity.
+    player.status = PlayerConnectionStatus.connected;
+    player.disconnectedAt = null;
+    player.disconnectDeadline = null;
+    player.lastHeartbeatAt = now;
+
+    session.playerId = player.playerId;
+    session.deviceId = player.deviceId;
+    session.lastHeartbeatAt = now;
+    registry.add(session);
+
+    // Rotate the resume token so a captured token cannot be reused.
+    final String newToken = SecureRandom.token();
+    player.resumeTokenHash = _hash(newToken);
+
+    room.stateVersion++;
+
+    final HostMatchState? match = room.match;
+    if (match != null &&
+        room.status == RoomStatus.active &&
+        match.activePlayerId == player.playerId) {
+      match.turnDeadline = now.add(
+        Duration(seconds: room.config.turnDurationSeconds),
+      );
+    }
+
+    await _transport?.send(
+      session.connectionId,
+      ProtocolMessage(
+        messageType: HostEventType.joined,
+        requestId: message.requestId,
+        payload: <String, dynamic>{
+          'playerId': player.playerId,
+          'roomId': room.roomId,
+          'resumeToken': newToken,
+          'snapshot': projections.buildFor(room, player.playerId).toJson(),
+        },
+      ),
+    );
+
+    if (room.status == RoomStatus.placement) {
+      await _sendPlacementState(room, player.playerId);
+    }
+    await _broadcastReadiness(room);
+
+    if (match != null) {
+      await _transport?.send(
+        session.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.stateSnapshot,
+          payload: <String, dynamic>{
+            'snapshot': _matchSnapshot(room, player.playerId).toJson(),
+          },
+        ),
+      );
+    }
+
+    await _broadcastRoomState(room);
+    await _broadcastPlayerReconnected(room, player.playerId);
+    _emitHostSnapshot();
+  }
+
   // -------------------------------------------------------------- helpers
 
   /// Marks a member as disconnected when their socket drops.
-  void handleConnectionLost(ClientSession session) {
+  ///
+  /// The seat is kept for [AppConfig.nonHostGracePeriodSeconds] seconds so
+  /// the member can reclaim it with their resume token (PLAN.md §2.8). The
+  /// Host never elects a replacement or migrates authority (PLAN.md §2.9).
+  Future<void> handleConnectionLost(ClientSession session) async {
     final HostRoomState? room = _state;
     final String? playerId = session.playerId;
     if (room == null || playerId == null) return;
@@ -1757,11 +1958,79 @@ class RoomCoordinator {
     final HostPlayer? player = room.players[playerId];
     if (player == null) return;
     if (player.status != PlayerConnectionStatus.connected) return;
+    session.closed = true;
+    if (player.isHost) {
+      // The Host never reconnects or migrates: a Host loss is terminal for
+      // the room. The socket drop is surfaced to clients through the missing
+      // heartbeat (PLAN.md §2.9, §9.5).
+      return;
+    }
 
+    final DateTime now = _now();
     player.status = PlayerConnectionStatus.disconnected;
-    player.disconnectedAt = DateTime.now();
+    player.disconnectedAt = now;
+    player.disconnectDeadline = now.add(
+      const Duration(seconds: AppConfig.nonHostGracePeriodSeconds),
+    );
     room.stateVersion++;
+
+    final HostMatchState? match = room.match;
+    if (match != null &&
+        room.status == RoomStatus.active &&
+        match.activePlayerId == playerId) {
+      // Pause the turn timer for at most the grace period. The deadline can
+      // never outlive the reconnect grace period (PLAN.md §2.8).
+      match.turnDeadline = player.disconnectDeadline;
+    }
+
     _emitHostSnapshot();
+    await _broadcastPlayerDisconnected(room, playerId);
+    await _broadcastRoomState(room);
+    await _checkPreparationCancellation(room);
+  }
+
+  /// Tells every client that a member lost their connection.
+  Future<void> _broadcastPlayerDisconnected(
+    HostRoomState room,
+    String playerId,
+  ) async {
+    final HostPlayer? player = room.players[playerId];
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.playerDisconnected,
+          payload: <String, dynamic>{
+            'playerId': playerId,
+            'displayName': player?.displayName,
+            'status': PlayerConnectionStatus.disconnected.wire,
+            'stateVersion': room.stateVersion,
+          },
+        ),
+      );
+    }
+  }
+
+  /// Tells every client that a member reclaimed their seat.
+  Future<void> _broadcastPlayerReconnected(
+    HostRoomState room,
+    String playerId,
+  ) async {
+    final HostPlayer? player = room.players[playerId];
+    for (final ClientSession client in registry.admittedSessions.toList()) {
+      await _transport?.send(
+        client.connectionId,
+        ProtocolMessage(
+          messageType: HostEventType.playerReconnected,
+          payload: <String, dynamic>{
+            'playerId': playerId,
+            'displayName': player?.displayName,
+            'status': PlayerConnectionStatus.connected.wire,
+            'stateVersion': room.stateVersion,
+          },
+        ),
+      );
+    }
   }
 
   /// Sends the current room state to every admitted client.

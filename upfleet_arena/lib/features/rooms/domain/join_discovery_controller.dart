@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/permissions/lan_permission_service.dart';
 import '../../lan_networking/domain/lan_discovery.dart';
 import '../../lan_networking/domain/lan_networking_providers.dart';
 
@@ -13,6 +14,7 @@ class JoinDiscoveryState {
     this.isScanning = false,
     this.rooms = const <DiscoveredRoom>[],
     this.errorMessage,
+    this.permission = LanPermissionState.unknown,
   });
 
   /// Whether the scan is running.
@@ -24,15 +26,20 @@ class JoinDiscoveryState {
   /// Why the scan failed, when it did.
   final String? errorMessage;
 
+  /// The local-network permission state observed for this scan.
+  final LanPermissionState permission;
+
   /// Returns a copy with the given fields replaced.
   JoinDiscoveryState copyWith({
     bool? isScanning,
     List<DiscoveredRoom>? rooms,
     String? errorMessage,
+    LanPermissionState? permission,
   }) => JoinDiscoveryState(
     isScanning: isScanning ?? this.isScanning,
     rooms: rooms ?? this.rooms,
     errorMessage: errorMessage ?? this.errorMessage,
+    permission: permission ?? this.permission,
   );
 }
 
@@ -51,8 +58,32 @@ class JoinDiscoveryController extends Notifier<JoinDiscoveryState> {
   }
 
   /// Starts scanning.
+  ///
+  /// The local-network permission is checked (and requested when the platform
+  /// supports an explicit request) before any discovery call, so a denied
+  /// permission surfaces as a readable state instead of a silent failure
+  /// (PLAN.md §11, §5.4).
   Future<void> start() async {
     if (state.isScanning) return;
+
+    final LanPermissionService permissionService = ref.read(
+      lanPermissionServiceProvider,
+    );
+    LanPermissionState permission = await permissionService.currentState();
+    if (permission == LanPermissionState.denied) {
+      permission = await permissionService.request();
+    }
+    state = state.copyWith(permission: permission);
+
+    if (permission == LanPermissionState.denied ||
+        permission == LanPermissionState.permanentlyDenied) {
+      state = state.copyWith(
+        isScanning: false,
+        rooms: const <DiscoveredRoom>[],
+        errorMessage: permissionService.messageFor(permission),
+      );
+      return;
+    }
 
     final LanDiscoveryService service = ref.read(lanDiscoveryServiceProvider);
 

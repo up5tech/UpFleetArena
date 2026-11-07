@@ -19,6 +19,7 @@ class HostPlayer {
     this.resumeTokenHash,
     this.status = PlayerConnectionStatus.connected,
     this.disconnectedAt,
+    this.disconnectDeadline,
     this.lastHeartbeatAt,
   });
 
@@ -51,6 +52,12 @@ class HostPlayer {
 
   /// When the member was disconnected.
   DateTime? disconnectedAt;
+
+  /// Last moment at which the member may reclaim their seat.
+  ///
+  /// The grace period is [AppConfig.nonHostGracePeriodSeconds] long and is
+  /// owned by the Host (PLAN.md §2.8).
+  DateTime? disconnectDeadline;
 
   /// When the last heartbeat arrived.
   DateTime? lastHeartbeatAt;

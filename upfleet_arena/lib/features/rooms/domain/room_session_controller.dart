@@ -270,6 +270,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   StreamSubscription<PublicActivity>? _clientActivitySubscription;
   (String, int)? _submittedTurn;
 
+  // Reconnect state is kept in the underlying RoomClientSession; the
+  // controller only surfaces the connection-lost event (PLAN.md §2.8).
+
   @override
   RoomSessionState build() {
     ref.onDispose(_dispose);
@@ -734,6 +737,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
                 'The connection to the host was lost. The match cannot '
                 'continue without the host.',
           );
+        case RoomPlayerDisconnectedEvent():
+        case RoomPlayerReconnectedEvent():
+          break;
         case RoomSnapshotEvent():
           break;
       }

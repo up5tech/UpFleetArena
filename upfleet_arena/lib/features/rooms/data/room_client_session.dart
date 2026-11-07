@@ -67,6 +67,28 @@ class RoomConnectionLostEvent extends RoomClientEvent {
   const RoomConnectionLostEvent();
 }
 
+/// A room member lost their connection.
+class RoomPlayerDisconnectedEvent extends RoomClientEvent {
+  const RoomPlayerDisconnectedEvent({
+    required this.playerId,
+    this.displayName,
+  });
+
+  final String playerId;
+  final String? displayName;
+}
+
+/// A room member reclaimed their seat.
+class RoomPlayerReconnectedEvent extends RoomClientEvent {
+  const RoomPlayerReconnectedEvent({
+    required this.playerId,
+    this.displayName,
+  });
+
+  final String playerId;
+  final String? displayName;
+}
+
 /// The client side of a room session.
 ///
 /// It opens one long-lived TCP connection to the Host, performs the join
@@ -226,6 +248,56 @@ class RoomClientSession {
 
   Completer<String>? _pendingJoin;
 
+  /// Reclaims a temporarily disconnected seat with a resume token.
+  ///
+  /// Returns the player ID bound to the resumed seat. Throws
+  /// [RoomJoinException] when the Host rejects the resume.
+  Future<String> resume({
+    required InternetAddress address,
+    required int port,
+    required String resumeToken,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    await _transport.connect(address, port, timeout: timeout);
+
+    _errorSubscription = _transport.errors.listen((ProtocolError error) {
+      if (_closed) return;
+      _events.add(
+        RoomErrorEvent(code: error.code, message: error.message),
+      );
+    });
+
+    _frameSubscription = _transport.frames.listen(_handleFrame);
+
+    final Completer<String> completer = Completer<String>();
+    final String requestId = 'resume-${DateTime.now().microsecondsSinceEpoch}';
+
+    _pendingJoin = completer;
+
+    _transport.send(
+      ProtocolMessage(
+        messageType: ClientMessageType.resume,
+        requestId: requestId,
+        payload: <String, dynamic>{'resumeToken': resumeToken},
+      ),
+    );
+
+    _startHeartbeat();
+    _startWatchdog();
+
+    try {
+      return await completer.future.timeout(
+        timeout,
+        onTimeout: () => throw const RoomJoinException(
+          ProtocolErrorCode.hostUnreachable,
+          'The host did not answer in time.',
+        ),
+      );
+    } finally {
+      _pendingJoin = null;
+    }
+  }
+
   void _handleFrame(ProtocolMessage message) {
     _lastFrameAt = DateTime.now();
     switch (message.messageType) {
@@ -290,6 +362,20 @@ class RoomClientSession {
         final Object? turnRemaining =
             message.payload['turnRemainingSeconds'];
         if (turnRemaining is int) _turnCountdowns.add(turnRemaining);
+      case HostEventType.playerDisconnected:
+        _events.add(
+          RoomPlayerDisconnectedEvent(
+            playerId: message.payload['playerId'] as String? ?? '',
+            displayName: message.payload['displayName'] as String?,
+          ),
+        );
+      case HostEventType.playerReconnected:
+        _events.add(
+          RoomPlayerReconnectedEvent(
+            playerId: message.payload['playerId'] as String? ?? '',
+            displayName: message.payload['displayName'] as String?,
+          ),
+        );
       case HostEventType.closed:
         _events.add(
           RoomClosedEvent(

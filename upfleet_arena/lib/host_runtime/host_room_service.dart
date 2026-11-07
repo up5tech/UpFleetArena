@@ -147,7 +147,7 @@ class HostRoomService implements RoomTransport {
     _connections.remove(connectionId);
     session.closed = true;
     coordinator.registry.remove(connectionId);
-    coordinator.handleConnectionLost(session);
+    unawaited(coordinator.handleConnectionLost(session));
   }
 
   void _handleRoomClosed() {

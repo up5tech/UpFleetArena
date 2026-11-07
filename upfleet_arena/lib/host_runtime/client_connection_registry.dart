@@ -31,6 +31,11 @@ class ClientSession {
   /// Whether the connection has been closed.
   bool closed = false;
 
+  /// Failed room-code attempts on this connection.
+  ///
+  /// Used to rate-limit brute-force join attempts (PLAN.md §12).
+  int failedJoinAttempts = 0;
+
   /// Whether the connection completed the join handshake.
   bool get isAdmitted => playerId != null && !closed;
 }
