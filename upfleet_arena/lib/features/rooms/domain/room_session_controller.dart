@@ -73,6 +73,8 @@ class RoomSessionState {
     this.firePending = false,
     this.combatError,
     this.lastActivity,
+    this.matchResult,
+    this.activityFeed = const <PublicActivity>[],
   });
 
   /// Whether this device hosts, joined, or is outside a room.
@@ -138,8 +140,24 @@ class RoomSessionState {
   final String? combatError;
   final PublicActivity? lastActivity;
 
+  /// The final result, once the Host ended the match.
+  final MatchResult? matchResult;
+
+  /// The most recent public shots, oldest first.
+  ///
+  /// They carry no coordinate, so a spectator may read them (PLAN.md §5.2).
+  final List<PublicActivity> activityFeed;
+
   /// Whether this device hosts the room.
   bool get isHost => role == RoomRole.host;
+
+  /// Whether this player lost their fleet and may only watch the match.
+  bool get isSpectating {
+    final MatchSnapshot? match = matchSnapshot;
+    final String? viewer = playerId;
+    if (match == null || viewer == null) return false;
+    return match.playerById(viewer)?.alive == false;
+  }
 
   /// Whether the device is a member of a room.
   bool get isInRoom => status == RoomSessionStatus.inRoom;
@@ -174,6 +192,8 @@ class RoomSessionState {
     bool? firePending,
     Object? combatError = _unset,
     Object? lastActivity = _unset,
+    Object? matchResult = _unset,
+    List<PublicActivity>? activityFeed,
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
@@ -208,6 +228,10 @@ class RoomSessionState {
     firePending: firePending ?? this.firePending,
     combatError: identical(combatError, _unset) ? this.combatError : combatError as String?,
     lastActivity: identical(lastActivity, _unset) ? this.lastActivity : lastActivity as PublicActivity?,
+    matchResult: identical(matchResult, _unset)
+        ? this.matchResult
+        : matchResult as MatchResult?,
+    activityFeed: activityFeed ?? this.activityFeed,
   );
 
   static const Object _unset = Object();
@@ -235,6 +259,8 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   StreamSubscription<String>? _clientNoticeSubscription;
   StreamSubscription<MatchSnapshot>? _hostMatchSnapshotSubscription;
   StreamSubscription<MatchSnapshot>? _clientMatchSnapshotSubscription;
+  StreamSubscription<MatchResult>? _hostMatchResultSubscription;
+  StreamSubscription<MatchResult>? _clientMatchResultSubscription;
   StreamSubscription<ShotFeedback>? _hostShotSubscription;
   StreamSubscription<ShotFeedback>? _clientShotSubscription;
   StreamSubscription<int>? _hostTurnCountdownSubscription;
@@ -340,13 +366,15 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
       _hostMatchSnapshotSubscription = service.coordinator.hostMatchSnapshots
           .listen(_acceptMatchSnapshot);
+      _hostMatchResultSubscription = service.coordinator.hostMatchResults
+          .listen(_acceptMatchResult);
       _hostTurnCountdownSubscription = service.coordinator.hostTurnCountdowns
           .listen(_acceptTurnCountdown);
       _hostShotSubscription = service.coordinator.hostShotFeedbacks.listen(
         (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
       );
       _hostActivitySubscription = service.coordinator.hostPublicActivities.listen(
-        (PublicActivity activity) => state = state.copyWith(lastActivity: activity, lastShot: null),
+        _acceptPublicActivity,
       );
 
       service.coordinator.createRoom(
@@ -506,6 +534,40 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     state = state.copyWith(turnCountdown: Countdown(remainingSeconds: remaining));
   }
 
+  /// Stores the final result the Host broadcast.
+  ///
+  /// The ranking and the statistics are Host truth: the client renders them
+  /// and never recomputes them (PLAN.md §2.10, §6.6).
+  void _acceptMatchResult(MatchResult result) {
+    final MatchResult? current = state.matchResult;
+    if (current != null &&
+        current.matchId == result.matchId &&
+        result.stateVersion < current.stateVersion) {
+      return;
+    }
+    state = state.copyWith(
+      matchResult: result,
+      turnCountdown: null,
+      firePending: false,
+    );
+  }
+
+  void _acceptPublicActivity(PublicActivity activity) {
+    final List<PublicActivity> feed = <PublicActivity>[
+      ...state.activityFeed,
+      activity,
+    ];
+    state = state.copyWith(
+      lastActivity: activity,
+      lastShot: null,
+      activityFeed: feed.length > _activityFeedLimit
+          ? feed.sublist(feed.length - _activityFeedLimit)
+          : feed,
+    );
+  }
+
+  static const int _activityFeedLimit = 20;
+
   /// Removes a player from the room. Host only.
   Future<void> kick(String playerId) async {
     final HostRoomService? service = _hostService;
@@ -628,11 +690,12 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       },
     );
     _clientMatchSnapshotSubscription = session.matchSnapshots.listen(_acceptMatchSnapshot);
+    _clientMatchResultSubscription = session.matchResults.listen(_acceptMatchResult);
     _clientShotSubscription = session.shotFeedbacks.listen(
       (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
     );
     _clientActivitySubscription = session.publicActivities.listen(
-      (PublicActivity activity) => state = state.copyWith(lastActivity: activity, lastShot: null),
+      _acceptPublicActivity,
     );
     _clientTurnCountdownSubscription = session.turnCountdowns.listen(_acceptTurnCountdown);
     _eventSubscription = session.events.listen((RoomClientEvent event) {
@@ -753,6 +816,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _hostMatchSnapshotSubscription = null;
     await _clientMatchSnapshotSubscription?.cancel();
     _clientMatchSnapshotSubscription = null;
+    await _hostMatchResultSubscription?.cancel();
+    _hostMatchResultSubscription = null;
+    await _clientMatchResultSubscription?.cancel();
+    _clientMatchResultSubscription = null;
     await _hostShotSubscription?.cancel();
     _hostShotSubscription = null;
     await _clientShotSubscription?.cancel();

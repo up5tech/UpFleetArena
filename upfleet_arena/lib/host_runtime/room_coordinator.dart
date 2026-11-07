@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../core/utils/secure_random.dart';
 import '../game_engine/board/board.dart';
 import '../game_engine/combat/combat.dart';
+import '../game_engine/combat/match_result.dart';
 import '../game_engine/fleet/fleet_profile.dart';
 import '../game_engine/placement/auto_placement.dart';
 import '../game_engine/placement/placement.dart';
@@ -97,6 +98,8 @@ class RoomCoordinator {
       StreamController<int>.broadcast();
   final StreamController<MatchSnapshot> _hostMatchSnapshots =
       StreamController<MatchSnapshot>.broadcast();
+  final StreamController<MatchResult> _hostMatchResults =
+      StreamController<MatchResult>.broadcast();
 
   final StreamController<ShotFeedback> _hostShotFeedbacks =
       StreamController<ShotFeedback>.broadcast();
@@ -142,6 +145,9 @@ class RoomCoordinator {
 
   /// The match state of the Host, as every client receives it.
   Stream<MatchSnapshot> get hostMatchSnapshots => _hostMatchSnapshots.stream;
+
+  /// The final result of the match, once one player was left alive.
+  Stream<MatchResult> get hostMatchResults => _hostMatchResults.stream;
 
   /// The seconds that are left before the current turn ends.
   Stream<int> get hostTurnCountdowns => _hostTurnCountdowns.stream;
@@ -1212,6 +1218,7 @@ class RoomCoordinator {
     if (isMatchFinished(match.aliveCount) || next == null) {
       _stopPlacementTimer();
       match.turnDeadline = null;
+      match.finishedAt = _now();
       room.status = RoomStatus.finished;
     } else {
       match.activePlayerId = next;
@@ -1363,9 +1370,9 @@ class RoomCoordinator {
         .putIfAbsent(playerId, () => <String, Map<CellCoord, ShotResult>>{})
         .putIfAbsent(targetId, () => <CellCoord, ShotResult>{})[cell] =
         resolution.result;
-    match.recordSuccessfulShot(playerId);
+    match.recordShot(playerId, resolution.result);
     final bool eliminated = targetBoard.isEliminated &&
-        match.eliminated.add(targetId);
+        match.recordElimination(targetId);
     _completeTurn(room);
 
     await _sendShotFeedback(room, playerId, targetId, cell, resolution.result,
@@ -1377,26 +1384,59 @@ class RoomCoordinator {
   }
 
   Future<void> _finishMatch(HostRoomState room, String? winnerPlayerId) async {
-    final HostPlayer? winner = winnerPlayerId == null
-        ? null
-        : room.players[winnerPlayerId];
+    final MatchResult result = _buildResult(room, winnerPlayerId);
 
     for (final ClientSession client in registry.admittedSessions.toList()) {
       await _transport?.send(
         client.connectionId,
         ProtocolMessage(
           messageType: HostEventType.finished,
-          payload: <String, dynamic>{
-            'winnerPlayerId': winnerPlayerId,
-            'winnerDisplayName': winner?.displayName,
-            'stateVersion': room.stateVersion,
-          },
+          payload: result.toJson(),
         ),
       );
     }
+    if (!_hostMatchResults.isClosed) _hostMatchResults.add(result);
     await _broadcastMatchSnapshot(room);
     await _broadcastRoomState(room);
     _emitHostSnapshot();
+  }
+
+  /// Builds the final ranking and statistics from Host-owned state.
+  ///
+  /// The ranking and every number come from the Host's own records, so all
+  /// clients receive an identical result (PLAN.md §2.10).
+  MatchResult _buildResult(HostRoomState room, String? winnerPlayerId) {
+    final HostMatchState match = room.match!;
+    return MatchResult(
+      matchId: match.matchId,
+      stateVersion: room.stateVersion,
+      winnerPlayerId: winnerPlayerId,
+      winnerDisplayName: winnerPlayerId == null
+          ? null
+          : room.players[winnerPlayerId]?.displayName,
+      durationSeconds: match.finishedAt!
+          .difference(match.startedAt)
+          .inSeconds,
+      ranking: buildRanking(
+        turnOrder: match.turnOrder,
+        eliminationOrder: match.eliminationOrder,
+        winnerPlayerId: winnerPlayerId,
+      ).map((PlayerStanding standing) {
+        final PlayerMatchStats stats =
+            match.stats[standing.playerId] ?? PlayerMatchStats();
+        return PlayerResultView(
+          playerId: standing.playerId,
+          displayName:
+              room.players[standing.playerId]?.displayName ?? 'Player',
+          rank: standing.rank,
+          shots: stats.shots,
+          hits: stats.hits,
+          misses: stats.misses,
+          shipsSunk: stats.shipsSunk,
+          timeouts: match.timeouts[standing.playerId] ?? 0,
+        );
+      }).toList(),
+    );
   }
 
   /// Tells the attacker and the target what the shot did.
@@ -1559,6 +1599,7 @@ class RoomCoordinator {
               displayName: player.displayName,
               alive: match.isAlive(player.playerId),
               timeouts: match.timeouts[player.playerId] ?? 0,
+              shipsRemaining: _shipsAfloat(match, player.playerId),
             ),
           )
           .toList(),
@@ -1579,6 +1620,16 @@ class RoomCoordinator {
           ? match.winnerPlayerId
           : null,
     );
+  }
+
+  /// The number of ships of a player that are still afloat.
+  ///
+  /// Aggregate status only: it is public because the public activity events
+  /// already announce every sunk ship (PLAN.md §6.6).
+  int _shipsAfloat(HostMatchState match, String playerId) {
+    final PlayerBoard? board = match.boards[playerId];
+    if (board == null) return 0;
+    return board.ships.length - board.sunkCount;
   }
 
   /// The own board of a player, with the impacts it received.
@@ -2110,6 +2161,7 @@ class RoomCoordinator {
     await _hostMatchStarts.close();
     await _hostTurnCountdowns.close();
     await _hostMatchSnapshots.close();
+    await _hostMatchResults.close();
     await _hostShotFeedbacks.close();
     await _hostPublicActivities.close();
     await _hostNotices.close();

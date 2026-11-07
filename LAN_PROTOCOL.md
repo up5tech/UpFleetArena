@@ -255,7 +255,12 @@ text or private fleet data.
 - During a match, the target receives impact coordinates for shots against
   their own board; the attacker receives the result of their own shot.
 - Other players receive public match events and aggregate status only.
-- Eliminated players receive a restricted spectator projection.
+- Eliminated players receive a restricted spectator projection: their own
+  sunk fleet, their own attack history, the public roster with aggregate
+  fleet status and the public activity events. They get no fire affordance
+  and the Host refuses any shot they send.
+- The final ranking and the per-player statistics are computed by the Host
+  and broadcast identically to every client.
 - Client clocks, turn counters, hit calculations, ship counts and match status
   are never trusted. The Host owns all of them.
 - Host-side complete state stays separate from serialized client view models.
@@ -667,7 +672,7 @@ once.
 | `game:turn-started` | Everybody | `activePlayerId`, `turnNumber`, `remainingSeconds` |
 | `game:player-eliminated` | Everybody | `playerId`, `displayName` |
 | `game:state-snapshot` | Everybody, one filtered view each | `snapshot` — see below |
-| `game:finished` | Everybody | `winnerPlayerId`, `winnerDisplayName`, `stateVersion` |
+| `game:finished` | Everybody | `matchId`, `stateVersion`, `winnerPlayerId`, `winnerDisplayName`, `durationSeconds`, `ranking[]` — see below |
 
 ### `game:state-snapshot`
 
@@ -685,7 +690,7 @@ each accepted change:
       "activePlayerId": "player-uuid",
       "turnRemainingSeconds": 30,
       "players": [
-        { "playerId": "player-uuid", "displayName": "Alice", "alive": true, "timeouts": 0 }
+        { "playerId": "player-uuid", "displayName": "Alice", "alive": true, "timeouts": 0, "shipsRemaining": 4 }
       ],
       "ownBoard": {
         "ships": [
@@ -714,6 +719,18 @@ shots **the recipient** fired at that opponent: the position of another
 player's ships never leaves the Host except in that player's own view. The
 player list follows the turn order, not the join order.
 
+`shipsRemaining` is aggregate status: the number of ships of that fleet that
+are still afloat. It carries no coordinate and no ship position, so every
+player may see it. The public activity events already announce every sunk
+ship, so the count reveals nothing that was not public before.
+
+An eliminated player receives the same filtered snapshot — their own sunk
+fleet and their own attack history — plus `alive: false` in `players[]`. That
+flag is what turns their UI into the read-only spectator view: no target
+selection, no battle board and no fire action. They never receive another
+player's fleet, and the Host rejects any fire command from them with
+`NOT_YOUR_TURN`.
+
 ### The turn deadline
 
 The Host owns the turn deadline exactly like the preparation deadline. The
@@ -721,6 +738,56 @@ The Host owns the turn deadline exactly like the preparation deadline. The
 a client that runs out of time simply has its turn skipped: the player is not
 eliminated for a single timeout, and the number of timeouts per player is
 reported in `players[]`.
+
+### `game:finished`
+
+The Host sends the final result once exactly one player is left alive. The
+payload is identical for every recipient: the ranking and the statistics are
+Host truth and no client recomputes them.
+
+```json
+{
+  "messageType": "game:finished",
+  "payload": {
+    "matchId": "match-uuid",
+    "stateVersion": 42,
+    "winnerPlayerId": "player-uuid",
+    "winnerDisplayName": "Alice",
+    "durationSeconds": 272,
+    "ranking": [
+      {
+        "playerId": "player-uuid", "displayName": "Alice", "rank": 1,
+        "shots": 18, "hits": 11, "misses": 7, "shipsSunk": 5, "timeouts": 0
+      },
+      {
+        "playerId": "player-uuid", "displayName": "Bob", "rank": 2,
+        "shots": 14, "hits": 8, "misses": 6, "shipsSunk": 3, "timeouts": 1
+      }
+    ]
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `matchId` | The match the result belongs to |
+| `stateVersion` | The final room state version, incremented exactly once by the winning shot |
+| `winnerPlayerId`, `winnerDisplayName` | The last player alive. `null` when nobody survived |
+| `durationSeconds` | From the first turn to the moment the match ended, measured with the Host clock |
+| `ranking[]` | Every player of the match, ordered from the winner down |
+
+The ranking is the winner first, then the eliminated players in **reverse
+elimination order**: the fleet that sank last places second. Every player
+appears exactly once.
+
+Statistics are counted per accepted shot. A sinking shot counts as a hit as
+well, so `shots == hits + misses` always holds, and `shipsSunk` counts the
+ships the player sank, not the ships they lost. `timeouts` is the number of
+turns the player let expire. A rejected shot never changes any number.
+
+The event is followed by a `game:state-snapshot` carrying `winnerPlayerId`
+and by a `room:state` with `status: "finished"`. The room stays open: the
+Host closes it explicitly, and a client leaves it, from the result screen.
 
 ## 9. Heartbeats and host loss
 

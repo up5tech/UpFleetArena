@@ -12,6 +12,7 @@ import '../../../shared/models/match_models.dart';
 import '../../../shared/widgets/board_canvas.dart';
 import '../../rooms/domain/room_session_controller.dart';
 import '../widgets/battle_board.dart';
+import '../widgets/spectator_view.dart';
 
 /// The screen of a running match.
 ///
@@ -86,16 +87,19 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     final List<TargetBoardView> living = snapshot.livingTargets;
     final String? targetId = living.any((target) => target.playerId == _selectedTargetId)
         ? _selectedTargetId : living.firstOrNull?.playerId;
+    final bool spectating = session.isSpectating;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('The match'),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const <Widget>[
-            Tab(text: 'Battle'),
-            Tab(text: 'Your board'),
-            Tab(text: 'Players'),
+          tabs: <Widget>[
+            Tab(text: spectating ? 'Spectating' : 'Battle'),
+            const Tab(text: 'Your board'),
+            const Tab(text: 'Players'),
           ],
         ),
       ),
@@ -103,30 +107,39 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
         child: TabBarView(
           controller: _tabs,
           children: <Widget>[
-            _BattleTab(
-              snapshot: snapshot,
-              session: session,
-              isMyTurn: isMyTurn,
-              remaining: remaining,
-              selectedTargetId: targetId,
-              selectedCell: _selectedCell,
-              onTargetSelected: (String targetId) {
-                setState(() {
-                  _selectedTargetId = targetId;
-                  _selectedCell = null;
-                });
-              },
-              onCellTapped: (CellCoord cell) {
-                setState(() => _selectedCell = cell);
-              },
-              onFire: () { if (targetId != null) unawaited(_fire(targetId)); },
-            ),
+            if (spectating)
+              SpectatorView(snapshot: snapshot, session: session)
+            else
+              _BattleTab(
+                snapshot: snapshot,
+                session: session,
+                isMyTurn: isMyTurn,
+                remaining: remaining,
+                selectedTargetId: targetId,
+                selectedCell: _selectedCell,
+                onTargetSelected: (String targetId) {
+                  setState(() {
+                    _selectedTargetId = targetId;
+                    _selectedCell = null;
+                  });
+                },
+                onCellTapped: (CellCoord cell) {
+                  setState(() => _selectedCell = cell);
+                },
+                onFire: () { if (targetId != null) unawaited(_fire(targetId)); },
+              ),
             _OwnBoardTab(snapshot: snapshot, session: session),
             _PlayersTab(snapshot: snapshot, session: session),
           ],
         ),
       ),
     );
+  }
+
+  /// Opens the result screen once the Host broadcast the final result.
+  void _followPhase(RoomSessionState session) {
+    if (!mounted) return;
+    if (session.matchResult != null) context.go('/match/result');
   }
 
   Future<void> _exit(RoomSessionState session) async {
@@ -396,15 +409,24 @@ class _PlayersTab extends StatelessWidget {
             child: Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
-                    player.playerId == session.playerId
-                        ? '${player.displayName} (you)'
-                        : player.displayName,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: player.playerId == snapshot.activePlayerId
-                          ? FontWeight.w700
-                          : null,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        player.playerId == session.playerId
+                            ? '${player.displayName} (you)'
+                            : player.displayName,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: player.playerId == snapshot.activePlayerId
+                              ? FontWeight.w700
+                              : null,
+                        ),
+                      ),
+                      Text(
+                        '${player.shipsRemaining} ships left',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
                   ),
                 ),
                 if (player.timeouts > 0)

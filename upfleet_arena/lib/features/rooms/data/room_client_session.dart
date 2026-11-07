@@ -92,6 +92,8 @@ class RoomClientSession {
       StreamController<String>.broadcast();
   final StreamController<MatchSnapshot> _matchSnapshots =
       StreamController<MatchSnapshot>.broadcast();
+  final StreamController<MatchResult> _matchResults =
+      StreamController<MatchResult>.broadcast();
   final StreamController<ShotFeedback> _shotFeedbacks =
       StreamController<ShotFeedback>.broadcast();
   final StreamController<PublicActivity> _publicActivities =
@@ -151,6 +153,9 @@ class RoomClientSession {
 
   /// The permission-filtered state of the match.
   Stream<MatchSnapshot> get matchSnapshots => _matchSnapshots.stream;
+
+  /// The final result, once the Host ended the match.
+  Stream<MatchResult> get matchResults => _matchResults.stream;
 
   /// The result of a shot this client is involved in.
   Stream<ShotFeedback> get shotFeedbacks => _shotFeedbacks.stream;
@@ -254,6 +259,8 @@ class RoomClientSession {
         if (rawMatch is Map<String, dynamic>) {
           _matchSnapshots.add(MatchSnapshot.fromJson(rawMatch));
         }
+      case HostEventType.finished:
+        _matchResults.add(MatchResult.fromJson(message.payload));
       case HostEventType.shotResult:
         _shotFeedbacks.add(ShotFeedback.fromJson(message.payload));
         if (message.requestId == _pendingFireId && _pendingFire?.isCompleted == false) {
@@ -486,6 +493,7 @@ class RoomClientSession {
     await _matchStarts.close();
     await _placementCancellations.close();
     await _matchSnapshots.close();
+    await _matchResults.close();
     await _shotFeedbacks.close();
     await _publicActivities.close();
     await _turnCountdowns.close();

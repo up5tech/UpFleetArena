@@ -249,7 +249,7 @@ void main() {
         'turnNumber': 4, 'activePlayerId': 'alice', 'turnRemainingSeconds': 30,
         'players': [for (final id in f.match.turnOrder) {
           'playerId': id, 'displayName': f.room.players[id]!.displayName,
-          'alive': true, 'timeouts': 0}],
+          'alive': true, 'timeouts': 0, 'shipsRemaining': legalFleet().length}],
         'ownBoard': own,
         'targets': [for (final id in f.match.turnOrder.where((id) => id != viewer)) {
           'playerId': id, 'displayName': f.room.players[id]!.displayName,

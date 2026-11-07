@@ -302,6 +302,7 @@ class MatchPlayerView {
     required this.displayName,
     required this.alive,
     required this.timeouts,
+    required this.shipsRemaining,
   });
 
   /// The player the entry belongs to.
@@ -316,12 +317,19 @@ class MatchPlayerView {
   /// How often the player ran out of time.
   final int timeouts;
 
+  /// How many ships of the fleet are still afloat.
+  ///
+  /// This is aggregate status only: it never carries a coordinate or a ship
+  /// position, so every player may see it (PLAN.md §6.6).
+  final int shipsRemaining;
+
   /// Serializes the player.
   Map<String, dynamic> toJson() => <String, dynamic>{
     'playerId': playerId,
     'displayName': displayName,
     'alive': alive,
     'timeouts': timeouts,
+    'shipsRemaining': shipsRemaining,
   };
 
   /// Parses a player received from the Host.
@@ -331,6 +339,7 @@ class MatchPlayerView {
         displayName: json['displayName'] as String? ?? 'Player',
         alive: json['alive'] as bool? ?? true,
         timeouts: json['timeouts'] as int? ?? 0,
+        shipsRemaining: json['shipsRemaining'] as int? ?? 0,
       );
 }
 
@@ -466,6 +475,140 @@ class MatchSnapshot {
           : null,
       targets: _readTargets(json['targets']),
       winnerPlayerId: json['winnerPlayerId'] as String?,
+    );
+  }
+}
+
+/// The final standing and statistics of one player.
+class PlayerResultView {
+  const PlayerResultView({
+    required this.playerId,
+    required this.displayName,
+    required this.rank,
+    required this.shots,
+    required this.hits,
+    required this.misses,
+    required this.shipsSunk,
+    required this.timeouts,
+  });
+
+  /// The player the entry belongs to.
+  final String playerId;
+
+  /// The display name of the player.
+  final String displayName;
+
+  /// The place of the player, starting at 1 for the winner.
+  final int rank;
+
+  /// How many shots the player fired.
+  final int shots;
+
+  /// How many shots hit a ship, including the ones that sank it.
+  final int hits;
+
+  /// How many shots found no ship.
+  final int misses;
+
+  /// How many ships the player sank.
+  final int shipsSunk;
+
+  /// How often the player ran out of time.
+  final int timeouts;
+
+  /// Serializes the entry.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'playerId': playerId,
+    'displayName': displayName,
+    'rank': rank,
+    'shots': shots,
+    'hits': hits,
+    'misses': misses,
+    'shipsSunk': shipsSunk,
+    'timeouts': timeouts,
+  };
+
+  /// Parses an entry received from the Host.
+  factory PlayerResultView.fromJson(Map<String, dynamic> json) =>
+      PlayerResultView(
+        playerId: json['playerId'] as String? ?? '',
+        displayName: json['displayName'] as String? ?? 'Player',
+        rank: json['rank'] as int? ?? 0,
+        shots: json['shots'] as int? ?? 0,
+        hits: json['hits'] as int? ?? 0,
+        misses: json['misses'] as int? ?? 0,
+        shipsSunk: json['shipsSunk'] as int? ?? 0,
+        timeouts: json['timeouts'] as int? ?? 0,
+      );
+}
+
+/// The final result of a finished match, built and broadcast by the Host.
+///
+/// Every client receives the same result: the ranking and the statistics are
+/// Host truth, never a client calculation (PLAN.md §2.10, §6.6).
+class MatchResult {
+  const MatchResult({
+    required this.matchId,
+    required this.stateVersion,
+    required this.winnerPlayerId,
+    required this.winnerDisplayName,
+    required this.durationSeconds,
+    required this.ranking,
+  });
+
+  /// The identifier of the match.
+  final String matchId;
+
+  /// The room state version the match ended on.
+  final int stateVersion;
+
+  /// The last player alive, or `null` when nobody survived.
+  final String? winnerPlayerId;
+
+  /// The display name of the winner.
+  final String? winnerDisplayName;
+
+  /// How long the match ran, from the first turn to the last shot.
+  final int durationSeconds;
+
+  /// Every player, ordered from the winner down.
+  final List<PlayerResultView> ranking;
+
+  /// The standing of a player, or `null` when the player is unknown.
+  PlayerResultView? standingOf(String playerId) {
+    for (final PlayerResultView entry in ranking) {
+      if (entry.playerId == playerId) return entry;
+    }
+    return null;
+  }
+
+  /// Serializes the result.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'matchId': matchId,
+    'stateVersion': stateVersion,
+    'winnerPlayerId': winnerPlayerId,
+    'winnerDisplayName': winnerDisplayName,
+    'durationSeconds': durationSeconds,
+    'ranking': ranking
+        .map((PlayerResultView entry) => entry.toJson())
+        .toList(),
+  };
+
+  /// Parses a result received from the Host.
+  factory MatchResult.fromJson(Map<String, dynamic> json) {
+    final Object? rawRanking = json['ranking'];
+    return MatchResult(
+      matchId: json['matchId'] as String? ?? '',
+      stateVersion: json['stateVersion'] as int? ?? 0,
+      winnerPlayerId: json['winnerPlayerId'] as String?,
+      winnerDisplayName: json['winnerDisplayName'] as String?,
+      durationSeconds: json['durationSeconds'] as int? ?? 0,
+      ranking: rawRanking is List
+          ? rawRanking
+                .whereType<Map<String, dynamic>>()
+                .map(PlayerResultView.fromJson)
+                .toList()
+          : const <PlayerResultView>[],
     );
   }
 }

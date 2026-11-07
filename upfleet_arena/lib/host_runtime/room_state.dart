@@ -1,5 +1,6 @@
 import '../game_engine/board/board.dart';
 import '../game_engine/combat/combat.dart';
+import '../game_engine/combat/match_result.dart';
 import '../game_engine/placement/placement.dart';
 import '../shared/models/room_models.dart';
 
@@ -127,8 +128,27 @@ class HostMatchState {
     _timeoutStreaks[playerId] = (_timeoutStreaks[playerId] ?? 0) + 1;
   }
 
-  void recordSuccessfulShot(String playerId) {
+  /// Records one accepted shot and breaks the timeout streak of the shooter.
+  void recordShot(String playerId, ShotResult result) {
+    (stats[playerId] ??= PlayerMatchStats()).recordShot(result);
     _timeoutStreaks[playerId] = 0;
+  }
+
+  /// The combat statistics of every player, keyed by player ID.
+  final Map<String, PlayerMatchStats> stats = <String, PlayerMatchStats>{};
+
+  /// The players whose fleet sank, in the order they were eliminated.
+  final List<String> eliminationOrder = <String>[];
+
+  /// When the match ended, once one player was left alive.
+  DateTime? finishedAt;
+
+  /// Marks the fleet of a player as sunk. Returns whether it was the first
+  /// time, so the caller only announces an elimination once.
+  bool recordElimination(String playerId) {
+    if (!eliminated.add(playerId)) return false;
+    eliminationOrder.add(playerId);
+    return true;
   }
 
   /// The exact board of every player, including the shots they received.
