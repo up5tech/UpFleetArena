@@ -15,16 +15,19 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        locale: const Locale('vi'),
-        home: const HomeScreen(),
+      ProviderScope(
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('vi'),
+          home: const HomeScreen(),
+        ),
       ),
     );
 
     expect(find.text('Tạo phòng'), findsOneWidget);
     expect(find.text('Vào phòng'), findsOneWidget);
+    expect(find.text('Hồ sơ & Cài đặt'), findsOneWidget);
     // English-only labels must not leak into the Vietnamese UI.
     expect(find.text('Create Room'), findsNothing);
     expect(find.text('Join Room'), findsNothing);
@@ -34,16 +37,19 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        locale: const Locale('en'),
-        home: const HomeScreen(),
+      ProviderScope(
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: const HomeScreen(),
+        ),
       ),
     );
 
     expect(find.text('Create Room'), findsOneWidget);
     expect(find.text('Join Room'), findsOneWidget);
+    expect(find.text('Profile & Settings'), findsOneWidget);
   });
 
   group('AppLocaleController', () {

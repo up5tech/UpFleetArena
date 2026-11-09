@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,9 +15,8 @@ import '../features/rooms/presentation/join_room_screen.dart';
 
 /// Application router.
 ///
-/// Phase 0 exposed the home screen and the LAN Lab. Phase 1 adds the profile,
-/// the create/join flows and the lobby. Phase 2 adds the Host settings screen
-/// (PLAN.md §10).
+/// Every implemented screen is routable. The LAN Lab is a developer tool and
+/// is only registered in debug builds (PLAN.md §15).
 class AppRouter {
   const AppRouter._();
 
@@ -78,12 +78,13 @@ class AppRouter {
         builder: (BuildContext context, GoRouterState state) =>
             const MatchResultScreen(),
       ),
-      GoRoute(
-        path: '/lan-lab',
-        name: 'lan-lab',
-        builder: (BuildContext context, GoRouterState state) =>
-            const LanLabScreen(),
-      ),
+      if (kDebugMode)
+        GoRoute(
+          path: '/lan-lab',
+          name: 'lan-lab',
+          builder: (BuildContext context, GoRouterState state) =>
+              const LanLabScreen(),
+        ),
     ],
   );
 }

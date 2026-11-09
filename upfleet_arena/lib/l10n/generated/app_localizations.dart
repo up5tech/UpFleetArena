@@ -353,7 +353,7 @@ abstract class AppLocalizations {
   /// No description provided for @lanLabSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Discovery + TCP proof of concept (Phase 0)'**
+  /// **'Developer diagnostics — debug builds only'**
   String get lanLabSubtitle;
 
   /// No description provided for @createRoom.
@@ -401,8 +401,26 @@ abstract class AppLocalizations {
   /// No description provided for @battleSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Phase 5 — turn-based combat'**
+  /// **'Turn-based combat on the target board'**
   String get battleSubtitle;
+
+  /// No description provided for @profileAndSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile & Settings'**
+  String get profileAndSettings;
+
+  /// No description provided for @profileAndSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname, avatar, sound, haptics and language'**
+  String get profileAndSettingsSubtitle;
+
+  /// No description provided for @inRoomOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Create or join a room first.'**
+  String get inRoomOnly;
 
   /// No description provided for @later.
   ///

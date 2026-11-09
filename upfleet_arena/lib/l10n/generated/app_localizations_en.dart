@@ -151,7 +151,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lanLab => 'LAN Lab';
 
   @override
-  String get lanLabSubtitle => 'Discovery + TCP proof of concept (Phase 0)';
+  String get lanLabSubtitle => 'Developer diagnostics — debug builds only';
 
   @override
   String get createRoom => 'Create Room';
@@ -176,7 +176,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reached from the lobby — private board and fleet';
 
   @override
-  String get battleSubtitle => 'Phase 5 — turn-based combat';
+  String get battleSubtitle => 'Turn-based combat on the target board';
+
+  @override
+  String get profileAndSettings => 'Profile & Settings';
+
+  @override
+  String get profileAndSettingsSubtitle =>
+      'Nickname, avatar, sound, haptics and language';
+
+  @override
+  String get inRoomOnly => 'Create or join a room first.';
 
   @override
   String get later => 'Later';

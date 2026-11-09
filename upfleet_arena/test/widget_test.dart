@@ -1,54 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/home/presentation/home_screen.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
-Widget _homeApp() => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  locale: const Locale('en'),
-  home: const HomeScreen(),
+Widget _homeApp() => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    locale: const Locale('en'),
+    home: const HomeScreen(),
+  ),
 );
 
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+}
+
 void main() {
-  testWidgets('Home shows the product identity and the phase map', (
+  testWidgets('Home shows the product identity and the main entries', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_homeApp());
 
     expect(find.text('UpFleet Arena'), findsOneWidget);
-    expect(find.text('LAN Lab'), findsOneWidget);
     expect(find.text('Create Room'), findsOneWidget);
     expect(find.text('Join Room'), findsOneWidget);
+    expect(find.text('Profile & Settings'), findsOneWidget);
   });
 
-  testWidgets('Phase 1 entries are enabled and later phases are not', (
+  testWidgets('Every implemented screen has an enabled entry', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_homeApp());
 
-    expect(find.text('Later'), findsWidgets);
-
     for (final String title in <String>[
-      'LAN Lab',
       'Create Room',
       'Join Room',
+      'Profile & Settings',
+      'Lobby',
+      'Ship Placement',
+      'Battle',
+      'LAN Lab',
     ]) {
       final Finder entry = find.widgetWithText(ListTile, title);
+      await _scrollTo(tester, entry);
       expect(entry, findsOneWidget, reason: title);
       expect(tester.widget<ListTile>(entry).enabled, isTrue, reason: title);
     }
+  });
 
-    for (final String title in <String>['Lobby', 'Ship Placement', 'Battle']) {
-      final Finder entry = find.widgetWithText(ListTile, title);
-      await tester.scrollUntilVisible(
-        entry,
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(entry, findsOneWidget, reason: title);
-      expect(tester.widget<ListTile>(entry).enabled, isFalse, reason: title);
-    }
+  testWidgets('The in-room entries ask for a room when none is active', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_homeApp());
+
+    final Finder lobby = find.widgetWithText(ListTile, 'Lobby');
+    await _scrollTo(tester, lobby);
+    await tester.ensureVisible(lobby);
+    await tester.pumpAndSettle();
+    await tester.tap(lobby);
+    await tester.pump();
+
+    expect(find.text('Create or join a room first.'), findsOneWidget);
+    // The tap must not navigate away from Home.
+    expect(find.text('UpFleet Arena'), findsOneWidget);
   });
 
   testWidgets('The frozen defaults are listed for the tester', (

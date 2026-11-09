@@ -151,8 +151,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get lanLab => 'LAN Lab';
 
   @override
-  String get lanLabSubtitle =>
-      'Bằng chứng thử nghiệm Discovery + TCP (Giai đoạn 0)';
+  String get lanLabSubtitle => 'Chẩn đoán cho nhà phát triển — chỉ bản debug';
 
   @override
   String get createRoom => 'Tạo phòng';
@@ -176,7 +175,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get shipPlacementSubtitle => 'Vào từ sảnh — bàn chơi và hạm đội riêng';
 
   @override
-  String get battleSubtitle => 'Giai đoạn 5 — chiến đấu theo lượt';
+  String get battleSubtitle => 'Chiến đấu theo lượt trên bàn mục tiêu';
+
+  @override
+  String get profileAndSettings => 'Hồ sơ & Cài đặt';
+
+  @override
+  String get profileAndSettingsSubtitle =>
+      'Biệt danh, ảnh đại diện, âm thanh, rung và ngôn ngữ';
+
+  @override
+  String get inRoomOnly => 'Hãy tạo hoặc tham gia một phòng trước.';
 
   @override
   String get later => 'Để sau';

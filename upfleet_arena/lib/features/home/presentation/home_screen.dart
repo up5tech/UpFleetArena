@@ -1,21 +1,44 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/config/app_config.dart';
+import '../../rooms/domain/room_session_controller.dart';
 
 /// Entry screen of the app.
 ///
-/// Phase 0 ships the LAN proof of concept only. The remaining entries are
-/// visible but disabled, each labelled with the phase that implements it, so
-/// the intended product flow stays discoverable (PLAN.md §15).
-class HomeScreen extends StatelessWidget {
+/// Every implemented flow is reachable from here: the profile and settings,
+/// creating and joining a room, and the in-room screens (lobby, placement,
+/// battle). The LAN Lab is a developer tool and is only listed in debug
+/// builds (PLAN.md §15).
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final RoomSessionState session = ref.watch(roomSessionControllerProvider);
+    final bool inRoom = session.isInRoom;
+    final bool matchRunning = session.matchSnapshot != null;
+
+    void openRoomScreen(String route, {bool available = true}) {
+      // The in-room screens read the active session: without one they would
+      // only show an empty shell, so point the player at the real entry paths.
+      final String? problem = !inRoom
+          ? l10n.inRoomOnly
+          : (available ? null : l10n.matchNotStarted);
+      if (problem == null) {
+        context.go(route);
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(problem)));
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.appTitle),
@@ -38,13 +61,6 @@ class HomeScreen extends StatelessWidget {
             _HeroCard(),
             const SizedBox(height: 16),
             _PhaseEntry(
-              icon: Icons.lan_outlined,
-              title: l10n.lanLab,
-              subtitle: l10n.lanLabSubtitle,
-              onTap: () => context.go('/lan-lab'),
-            ),
-            const SizedBox(height: 8),
-            _PhaseEntry(
               icon: Icons.add_home_work_outlined,
               title: l10n.createRoom,
               subtitle: l10n.createRoomSubtitle,
@@ -59,25 +75,41 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
+              icon: Icons.person_outline,
+              title: l10n.profileAndSettings,
+              subtitle: l10n.profileAndSettingsSubtitle,
+              onTap: () => context.push('/profile'),
+            ),
+            const SizedBox(height: 8),
+            _PhaseEntry(
               icon: Icons.people_outline,
               title: l10n.lobby,
               subtitle: l10n.lobbySubtitle,
-              enabled: false,
+              onTap: () => openRoomScreen('/lobby'),
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.grid_view_outlined,
               title: l10n.shipPlacement,
               subtitle: l10n.shipPlacementSubtitle,
-              enabled: false,
+              onTap: () => openRoomScreen('/placement'),
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.gps_fixed,
               title: l10n.battle,
               subtitle: l10n.battleSubtitle,
-              enabled: false,
+              onTap: () => openRoomScreen('/match', available: matchRunning),
             ),
+            if (kDebugMode) ...<Widget>[
+              const SizedBox(height: 8),
+              _PhaseEntry(
+                icon: Icons.lan_outlined,
+                title: l10n.lanLab,
+                subtitle: l10n.lanLabSubtitle,
+                onTap: () => context.go('/lan-lab'),
+              ),
+            ],
             const SizedBox(height: 24),
             const _ConstraintsCard(),
           ],
@@ -121,35 +153,28 @@ class _PhaseEntry extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.onTap,
-    this.enabled = true,
+    required this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback? onTap;
-  final bool enabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final Color foreground = enabled
-        ? AppTheme.textPrimary
-        : AppTheme.textSecondary.withValues(alpha: 0.6);
-
     return Card(
       child: ListTile(
-        enabled: enabled,
-        onTap: enabled ? onTap : null,
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 6,
         ),
-        leading: Icon(icon, color: enabled ? AppTheme.accent : foreground),
+        leading: Icon(icon, color: AppTheme.accent),
         title: Text(
           title,
-          style: TextStyle(
-            color: foreground,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -157,9 +182,7 @@ class _PhaseEntry extends StatelessWidget {
           subtitle,
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        trailing: enabled
-            ? const Icon(Icons.chevron_right, color: AppTheme.textSecondary)
-            : Chip(label: Text(AppLocalizations.of(context).later)),
+        trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
       ),
     );
   }
