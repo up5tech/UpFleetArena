@@ -6,6 +6,7 @@ import 'package:upfleet_arena/core/providers.dart';
 import 'package:upfleet_arena/core/settings/feedback_settings.dart';
 import 'package:upfleet_arena/core/storage/local_preferences.dart';
 import 'package:upfleet_arena/features/profile/presentation/profile_screen.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -160,7 +161,12 @@ void main() {
               LocalPreferences.withInstance(preferences),
             ),
           ],
-          child: const MaterialApp(home: ProfileScreen()),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('en'),
+            home: const ProfileScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();

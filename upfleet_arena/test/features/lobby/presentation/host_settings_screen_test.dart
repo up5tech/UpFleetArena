@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/lobby/presentation/host_settings_screen.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
 
 /// A session controller with a fixed state, so the screen can be rendered
@@ -66,7 +67,12 @@ Widget _app(RoomSessionState session, {List<String> saveProblems = const <String
         ),
       ),
     ],
-    child: const MaterialApp(home: HostSettingsScreen()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      home: const HostSettingsScreen(),
+    ),
   );
 }
 

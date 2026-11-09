@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/models/room_models.dart';
@@ -18,12 +19,13 @@ class CreateRoomScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Profile profile = ref.watch(profileProvider);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final bool busy = session.status == RoomSessionStatus.working;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create room')),
+      appBar: AppBar(title: Text(l10n.createRoomScreenTitle)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -49,12 +51,12 @@ class CreateRoomScreen extends ConsumerWidget {
                             children: <Widget>[
                               Text(
                                 profile.displayName.isEmpty
-                                    ? 'No nickname yet'
+                                    ? l10n.noNicknameYet
                                     : profile.displayName,
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
                               Text(
-                                'You will host this room',
+                                l10n.youWillHost,
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -62,35 +64,34 @@ class CreateRoomScreen extends ConsumerWidget {
                         ),
                         TextButton(
                           onPressed: () => context.push('/profile'),
-                          child: const Text('Edit'),
+                          child: Text(l10n.edit),
                         ),
                       ],
                     ),
                     const Divider(height: 24),
                     _SettingRow(
-                      label: 'Players',
+                      label: l10n.players,
                       value: '${RoomConfig.minimumPlayers}–'
                           '${RoomConfig.maximumPlayers}',
                     ),
                     _SettingRow(
-                      label: 'Board',
+                      label: l10n.board,
                       value:
                           '${RoomConfig.defaults.rows}×${RoomConfig.defaults.columns}',
                     ),
                     _SettingRow(
-                      label: 'Fleet',
+                      label: l10n.fleet,
                       value: RoomConfig.defaults.fleetPreset.wire,
                     ),
                     _SettingRow(
-                      label: 'Timers',
+                      label: l10n.timers,
                       value:
                           '${RoomConfig.defaults.placementDurationSeconds}s / '
                           '${RoomConfig.defaults.turnDurationSeconds}s',
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'These are the default settings. The host can change '
-                      'them in the lobby before the match starts.',
+                      l10n.defaultSettingsHint,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),
@@ -127,14 +128,14 @@ class CreateRoomScreen extends ConsumerWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.add_home_work),
-              label: Text(busy ? 'Creating…' : 'Create room'),
+              label: Text(busy ? l10n.creating : l10n.createRoomScreenTitle),
             ),
             if (profile.displayName.trim().isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Pick a nickname before creating a room.',
-                  style: TextStyle(color: AppTheme.sunk),
+                  l10n.pickNicknameFirst,
+                  style: const TextStyle(color: AppTheme.sunk),
                 ),
               ),
             const SizedBox(height: 12),
@@ -145,14 +146,12 @@ class CreateRoomScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'While you host',
+                      l10n.whileYouHost,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Keep this app open and in the foreground. Closing it '
-                      'ends the room for every player — there is no host '
-                      'migration.',
+                      l10n.keepAppOpenHost,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.sunk,
                         height: 1.4,

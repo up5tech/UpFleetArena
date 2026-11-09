@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/features/match/presentation/match_result_screen.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/models/match_models.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
 
@@ -99,6 +100,9 @@ Widget _app(_FakeSessionController controller) {
       roomSessionControllerProvider.overrideWith(() => controller),
     ],
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
       routerConfig: GoRouter(
         initialLocation: '/match/result',
         routes: <RouteBase>[

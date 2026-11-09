@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../core/settings/app_locale.dart';
 import '../../../core/settings/feedback_settings.dart';
 import '../../../shared/models/room_models.dart';
 import '../domain/profile.dart';
@@ -53,21 +55,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (!mounted) return;
     setState(() => _error = null);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile saved on this device.')),
+      SnackBar(content: Text(AppLocalizations.of(context).profileSaved)),
     );
     widget.onSaved?.call();
   }
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Profile profile = ref.watch(profileProvider);
+    final Locale? currentLocale = ref.watch(appLocaleProvider);
     final FeedbackSettings feedback = ref.watch(feedbackSettingsProvider);
     final FeedbackSettingsController feedbackController = ref.read(
       feedbackSettingsProvider.notifier,
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Your profile')),
+      appBar: AppBar(title: Text(l10n.yourProfile)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -79,7 +83,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Nickname',
+                      l10n.nickname,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -91,9 +95,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         if (_error != null) setState(() => _error = null);
                       },
                       onSubmitted: (String _) => _save(),
-                      decoration: const InputDecoration(
-                        hintText: 'How should other players see you?',
-                        prefixIcon: Icon(Icons.badge_outlined),
+                      decoration: InputDecoration(
+                        hintText: l10n.nicknameHint,
+                        prefixIcon: const Icon(Icons.badge_outlined),
                       ),
                     ),
                     if (_error != null)
@@ -106,8 +110,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     const SizedBox(height: 8),
                     Text(
-                      'Your nickname is stored on this device and is shared '
-                      'only with the players in the room you join.',
+                      l10n.nicknamePrivacy,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),
@@ -124,7 +127,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Avatar',
+                      l10n.avatar,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 12),
@@ -154,31 +157,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Sound & effects',
+                      l10n.soundAndEffects,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Sound effects'),
-                      subtitle: const Text('Shot, hit and result sounds'),
+                      title: Text(l10n.soundEffects),
+                      subtitle: Text(l10n.soundEffectsSubtitle),
                       value: feedback.soundEnabled,
                       onChanged: (bool value) =>
                           feedbackController.setSoundEnabled(value),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Haptic feedback'),
-                      subtitle: const Text('Vibration on shots and results'),
+                      title: Text(l10n.hapticFeedback),
+                      subtitle: Text(l10n.hapticFeedbackSubtitle),
                       value: feedback.hapticsEnabled,
                       onChanged: (bool value) =>
                           feedbackController.setHapticsEnabled(value),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Reduce motion'),
-                      subtitle: const Text(
-                        'Shorten animations; the system setting is also honored',
-                      ),
+                      title: Text(l10n.reduceMotion),
+                      subtitle: Text(l10n.reduceMotionSubtitle),
                       value: feedback.reducedMotion,
                       onChanged: (bool value) =>
                           feedbackController.setReducedMotion(value),
@@ -187,8 +188,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.language,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.languageSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButton<String>(
+                      value: currentLocale?.languageCode ?? 'system',
+                      isExpanded: true,
+                      items: <DropdownMenuItem<String>>[
+                        DropdownMenuItem<String>(
+                          value: 'system',
+                          child: Text(l10n.followSystem),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'en',
+                          child: Text(l10n.english),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'vi',
+                          child: Text(l10n.vietnamese),
+                        ),
+                      ],
+                      onChanged: (String? value) {
+                        final Locale? locale = value == null || value == 'system'
+                            ? null
+                            : Locale(value);
+                        ref.read(appLocaleProvider.notifier).setLocale(locale);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _save, child: const Text('Save profile')),
+            FilledButton(onPressed: _save, child: Text(l10n.saveProfile)),
           ],
         ),
       ),

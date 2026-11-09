@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/home/presentation/home_screen.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
+
+Widget _homeApp() => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('en'),
+  home: const HomeScreen(),
+);
 
 void main() {
   testWidgets('Home shows the product identity and the phase map', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pumpWidget(_homeApp());
 
     expect(find.text('UpFleet Arena'), findsOneWidget);
     expect(find.text('LAN Lab'), findsOneWidget);
@@ -17,7 +25,7 @@ void main() {
   testWidgets('Phase 1 entries are enabled and later phases are not', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pumpWidget(_homeApp());
 
     expect(find.text('Later'), findsWidgets);
 
@@ -46,7 +54,7 @@ void main() {
   testWidgets('The frozen defaults are listed for the tester', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pumpWidget(_homeApp());
 
     await tester.scrollUntilVisible(
       find.text('Frozen defaults'),

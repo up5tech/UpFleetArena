@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
 
@@ -36,6 +38,7 @@ dependencies:
   wakelock_plus: ^1.8.2
   # Shot and result sound effects (plan §15 Phase 8).
   audioplayers: ^6.8.1
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +48,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
 
   assets:
     - assets/sounds/

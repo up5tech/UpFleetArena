@@ -1,0 +1,396 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "UpFleet Arena",
+  "cancel": "Cancel",
+  "edit": "Edit",
+  "players": "Players",
+  "board": "Board",
+  "fleet": "Fleet",
+  "timers": "Timers",
+  "port": "Port",
+  "ready": "Ready",
+  "host": "Host",
+  "backToHome": "Back to home",
+  "endRoom": "End room",
+  "endTheRoom": "End the room?",
+  "roomSettings": "Room settings",
+  "invitationCode": "Invitation code",
+  "noNicknameYet": "No nickname yet",
+  "prepareYourFleet": "Prepare your fleet",
+  "yourFleet": "Your fleet",
+  "nobodyInRoom": "Nobody is in the room yet.",
+  "battle": "Battle",
+  "lobby": "Lobby",
+  "aPlayer": "A player",
+  "anotherPlayer": "another player",
+  "youWonMatch": "You won the match.",
+  "roomHasClosed": "The room has closed.",
+  "remove": "Remove",
+  "leave": "Leave",
+  "stop": "Stop",
+  "scan": "Scan",
+  "hide": "Hide",
+  "show": "Show",
+
+  "cellsCount": "{count} cells",
+  "@cellsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "shipsLeftCount": "{count} ships left",
+  "@shipsLeftCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "timeoutsCount": "{count} timeouts",
+  "@timeoutsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "playerNameYou": "{name} (you)",
+  "@playerNameYou": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "playerIsShooting": "{name} is shooting",
+  "@playerIsShooting": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "turnLabel": "Turn {turn}",
+  "@turnLabel": {
+    "placeholders": {
+      "turn": { "type": "int" }
+    }
+  },
+  "turnLabelWithTime": "Turn {turn} · {seconds}s left",
+  "@turnLabelWithTime": {
+    "placeholders": {
+      "turn": { "type": "int" },
+      "seconds": { "type": "int" }
+    }
+  },
+
+  "lanOnlyNoBackend": "LAN only · no backend",
+  "heroTitle": "Turn-based naval combat\nfor the same Wi-Fi",
+  "heroBody": "Every player places a private fleet, then takes turns firing at the others. The room host runs the whole game on their phone — no server, no account, no Internet connection required.",
+  "lanLab": "LAN Lab",
+  "lanLabSubtitle": "Discovery + TCP proof of concept (Phase 0)",
+  "createRoom": "Create Room",
+  "createRoomSubtitle": "Host a room and share the invitation code",
+  "joinRoom": "Join Room",
+  "joinRoomSubtitle": "Find a nearby room and join with the code",
+  "lobbySubtitle": "Reached from Create Room or Join Room",
+  "shipPlacement": "Ship Placement",
+  "shipPlacementSubtitle": "Reached from the lobby — private board and fleet",
+  "battleSubtitle": "Phase 5 — turn-based combat",
+  "later": "Later",
+  "frozenDefaults": "Frozen defaults",
+  "network": "Network",
+  "discovery": "Discovery",
+  "fleetConstraintValue": "Standard · {lengths}",
+  "@fleetConstraintValue": {
+    "placeholders": {
+      "lengths": { "type": "String" }
+    }
+  },
+  "timersConstraintValue": "{placement}s placement · {turn}s turn",
+  "@timersConstraintValue": {
+    "placeholders": {
+      "placement": { "type": "int" },
+      "turn": { "type": "int" }
+    }
+  },
+  "hostExitWarning": "Host exit ends the room for every player. There is no host migration and no Internet fallback.",
+
+  "yourProfile": "Your profile",
+  "nickname": "Nickname",
+  "nicknameHint": "How should other players see you?",
+  "nicknamePrivacy": "Your nickname is stored on this device and is shared only with the players in the room you join.",
+  "profileSaved": "Profile saved on this device.",
+  "avatar": "Avatar",
+  "soundAndEffects": "Sound & effects",
+  "soundEffects": "Sound effects",
+  "soundEffectsSubtitle": "Shot, hit and result sounds",
+  "hapticFeedback": "Haptic feedback",
+  "hapticFeedbackSubtitle": "Vibration on shots and results",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionSubtitle": "Shorten animations; the system setting is also honored",
+  "saveProfile": "Save profile",
+  "language": "Language",
+  "languageSubtitle": "Choose the language for the whole app.",
+  "followSystem": "Follow system",
+  "english": "English",
+  "vietnamese": "Tiếng Việt",
+
+  "createRoomScreenTitle": "Create room",
+  "youWillHost": "You will host this room",
+  "defaultSettingsHint": "These are the default settings. The host can change them in the lobby before the match starts.",
+  "creating": "Creating…",
+  "pickNicknameFirst": "Pick a nickname before creating a room.",
+  "whileYouHost": "While you host",
+  "keepAppOpenHost": "Keep this app open and in the foreground. Closing it ends the room for every player — there is no host migration.",
+
+  "joinRoomScreenTitle": "Join room",
+  "invitationCodeHint": "The host shares this code. It is checked by the host device over the direct connection, never over the network announcement.",
+  "nearbyRooms": "Nearby rooms",
+  "lookingForRooms": "Looking for rooms on this Wi-Fi…",
+  "noRoomsFound": "No rooms found yet. Tap Scan, or use the manual connection below.",
+  "noAddress": "no address",
+  "joinSelectedRoom": "Join selected room",
+  "manualConnection": "Manual connection",
+  "manualConnectionHint": "Use this when the router blocks discovery. Enter the IPv4 address and the port shown on the host device.",
+  "hostIpv4": "Host IPv4",
+  "connectManually": "Connect manually",
+  "portMustBeNumber": "The port must be a number.",
+  "nothingFound": "Nothing found?",
+  "routerIsolationHint": "The router may isolate clients from each other. The manual connection above uses a direct TCP link, so it sometimes works when discovery is filtered.",
+
+  "waitingForRoomState": "Waiting for the room state…",
+  "youSuffix": "  (you)",
+  "statusConnected": "Connected",
+  "statusDisconnected": "Disconnected — may rejoin",
+  "statusLeft": "Left the room",
+  "statusKicked": "Removed by the host",
+  "removePlayer": "Remove {name}",
+  "@removePlayer": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "copyTheCode": "Copy the code",
+  "invitationCodeCopied": "Invitation code copied.",
+  "shareTheInvitation": "Share the invitation",
+  "manualAddress": "Manual address",
+  "notAvailable": "not available",
+  "shareCodeHint": "Share the code with players on the same Wi-Fi. The code is not part of the network announcement, so only the players you tell can join.",
+  "shareJoinLine": "Join my UpFleet Arena room.",
+  "shareCodeLine": "Invitation code: {code}",
+  "@shareCodeLine": {
+    "placeholders": {
+      "code": { "type": "String" }
+    }
+  },
+  "shareAddressLine": "Manual address: {address}",
+  "@shareAddressLine": {
+    "placeholders": {
+      "address": { "type": "String" }
+    }
+  },
+  "shareWifiLine": "Every player must be on the same Wi-Fi network.",
+  "shareSubject": "UpFleet Arena invitation",
+  "sharingNotAvailable": "Sharing is not available here.",
+  "fleetSettingsValue": "{label} · {count} ships ({summary})",
+  "@fleetSettingsValue": {
+    "placeholders": {
+      "label": { "type": "String" },
+      "count": { "type": "int" },
+      "summary": { "type": "String" }
+    }
+  },
+  "capacity": "Capacity",
+  "capacityValue": "up to {count} players",
+  "@capacityValue": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "timersSettingsValue": "{placement} s preparation · {turn} s per turn",
+  "@timersSettingsValue": {
+    "placeholders": {
+      "placement": { "type": "int" },
+      "turn": { "type": "int" }
+    }
+  },
+  "onlyHostChangesSettings": "Only the host can change these settings.",
+  "startPreparation": "Start the preparation",
+  "preparationTimeoutHint": "When the preparation time runs out, the host places the missing ships automatically and the match starts.",
+  "removePlayerQuestion": "Remove {name}?",
+  "@removePlayerQuestion": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "removePlayerWarning": "They are removed from the room and cannot rejoin with this invitation code.",
+  "endRoomWarning": "Every player is disconnected and returns to the home screen. The room cannot be reopened.",
+  "yourFleetReady": "Your fleet is ready",
+  "leaveRoom": "Leave room",
+  "keepAppOpenLobby": "Keep this app open and in the foreground. Closing it ends the room for every player.",
+
+  "hostOnlySettingsNotice": "Only the host can change the room settings. You see the current values here.",
+  "rows": "Rows",
+  "columns": "Columns",
+  "decreaseLabel": "Decrease {label}",
+  "@decreaseLabel": {
+    "placeholders": {
+      "label": { "type": "String" }
+    }
+  },
+  "increaseLabel": "Increase {label}",
+  "@increaseLabel": {
+    "placeholders": {
+      "label": { "type": "String" }
+    }
+  },
+  "seatedPlayers": "{count, plural, =1{{count} player already in the room.} other{{count} players already in the room.}}",
+  "@seatedPlayers": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "fleetOptionLabel": "{label} · {count} ships",
+  "@fleetOptionLabel": {
+    "placeholders": {
+      "label": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "fleetLengths": "Lengths {summary}",
+  "@fleetLengths": {
+    "placeholders": {
+      "summary": { "type": "String" }
+    }
+  },
+  "preparation": "Preparation",
+  "eachTurn": "Each turn",
+  "saving": "Saving…",
+  "saveSettings": "Save settings",
+  "resetToDefaults": "Reset to the default settings",
+
+  "roomNoLongerOpen": "The room is no longer open.",
+  "rotate": "Rotate",
+  "undo": "Undo",
+  "auto": "Auto",
+  "youAreReady": "You are ready",
+  "iAmReady": "I am ready",
+  "placeEveryShipFirst": "Place every ship first",
+  "preparationEndsIn": "The preparation ends in {clock}",
+  "@preparationEndsIn": {
+    "placeholders": {
+      "clock": { "type": "String" }
+    }
+  },
+  "autoPlaceHint": "A fleet that is not finished in time is placed automatically.",
+  "placing": "Placing",
+
+  "matchEnded": "Match ended",
+  "theMatch": "The match",
+  "matchNotStarted": "The match has not started yet.",
+  "spectating": "Spectating",
+  "yourBoard": "Your board",
+  "leaveTheMatch": "Leave the match?",
+  "endMatchForEveryone": "This ends the match for every player.",
+  "youWillLeaveMatch": "You will leave this match.",
+  "target": "Target",
+  "noTargetsLeft": "There is nobody left to shoot at.",
+  "boardLegend": "Dot: miss · Cross: hit · Ring: sunk",
+  "selectedCell": "Selected: {cell}",
+  "@selectedCell": {
+    "placeholders": {
+      "cell": { "type": "String" }
+    }
+  },
+  "selectedCellAlreadyFired": "Selected: {cell} — already fired here",
+  "@selectedCellAlreadyFired": {
+    "placeholders": {
+      "cell": { "type": "String" }
+    }
+  },
+  "waitingForHost": "Waiting for host…",
+  "fireAtThisCell": "Fire at this cell",
+  "waitForYourTurn": "Wait for your turn",
+  "yourTurn": "Your turn",
+  "activityMissed": "{attacker} missed {target}.",
+  "@activityMissed": {
+    "placeholders": {
+      "attacker": { "type": "String" },
+      "target": { "type": "String" }
+    }
+  },
+  "activityHit": "{attacker} hit {target}.",
+  "@activityHit": {
+    "placeholders": {
+      "attacker": { "type": "String" },
+      "target": { "type": "String" }
+    }
+  },
+  "activitySunk": "{attacker} sank a ship of {target}.",
+  "@activitySunk": {
+    "placeholders": {
+      "attacker": { "type": "String" },
+      "target": { "type": "String" }
+    }
+  },
+  "battleActivitySunk": "{attacker} sank a ship belonging to {target}.",
+  "@battleActivitySunk": {
+    "placeholders": {
+      "attacker": { "type": "String" },
+      "target": { "type": "String" }
+    }
+  },
+  "feedbackYouMissed": "Your shot missed.",
+  "feedbackYouHit": "Your shot hit a ship.",
+  "feedbackYouSunk": "Your shot sank a ship.",
+  "feedbackTargetMissed": "A shot missed your board.",
+  "feedbackTargetHit": "A shot hit one of your ships.",
+  "feedbackTargetSunk": "One of your ships was sunk.",
+  "feedbackOthers": "The other players are shooting at each other.",
+  "matchIsOver": "The match is over.",
+  "yourBoardUnavailable": "Your board is not available.",
+  "ownBoardHint": "The red cells are the hits on your fleet. Only you and the host see this board.",
+  "turnOrder": "Turn order",
+  "inTheMatch": "In the match",
+  "eliminated": "Eliminated",
+
+  "matchResult": "Match result",
+  "matchNotFinished": "The match has not finished yet.",
+  "lastedDuration": "Lasted {duration}",
+  "@lastedDuration": {
+    "placeholders": {
+      "duration": { "type": "String" }
+    }
+  },
+  "lastedDurationWithRank": "Lasted {duration} · You finished #{rank}",
+  "@lastedDurationWithRank": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "rank": { "type": "int" }
+    }
+  },
+  "finalRanking": "Final ranking",
+  "rankingHint": "The ranking and every statistic come from the host. All players see the same result.",
+  "endRoomAndReturnHome": "End room and return home",
+  "returnHome": "Return home",
+  "matchOverClosesRoom": "The match is over. This closes the room for everyone.",
+  "nobodySurvived": "Nobody survived the match.",
+  "playerWonMatch": "{name} won the match.",
+  "@playerWonMatch": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "rankingStats": "{shots} shots · {hits} hits · {misses} misses · {sunk} sunk · {timeouts} timeouts",
+  "@rankingStats": {
+    "placeholders": {
+      "shots": { "type": "int" },
+      "hits": { "type": "int" },
+      "misses": { "type": "int" },
+      "sunk": { "type": "int" },
+      "timeouts": { "type": "int" }
+    }
+  },
+
+  "yourFleetWasSunk": "Your fleet was sunk.",
+  "spectatorWatching": "You are watching the rest of the match. You cannot fire.",
+  "stillInTheMatch": "Still in the match",
+  "nobodyIsLeft": "Nobody is left.",
+  "publicActivity": "Public activity",
+  "noPublicShots": "No public shots yet.",
+  "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab."
+}

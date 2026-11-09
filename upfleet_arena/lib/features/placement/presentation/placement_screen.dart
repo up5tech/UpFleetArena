@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../game_engine/board/board.dart';
@@ -120,13 +121,14 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final RoomSnapshot? snapshot = session.snapshot;
 
     if (snapshot == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Prepare your fleet')),
-        body: const Center(child: Text('The room is no longer open.')),
+        appBar: AppBar(title: Text(l10n.prepareYourFleet)),
+        body: Center(child: Text(l10n.roomNoLongerOpen)),
       );
     }
 
@@ -143,7 +145,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Prepare your fleet'),
+        title: Text(l10n.prepareYourFleet),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
@@ -169,7 +171,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Your fleet',
+              l10n.yourFleet,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -189,7 +191,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                         ? null
                         : _rotate,
                     icon: const Icon(Icons.rotate_right, size: 18),
-                    label: const Text('Rotate'),
+                    label: Text(l10n.rotate),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -197,7 +199,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _undoStack.isEmpty ? null : _undo,
                     icon: const Icon(Icons.undo, size: 18),
-                    label: const Text('Undo'),
+                    label: Text(l10n.undo),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -205,7 +207,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                   child: OutlinedButton.icon(
                     onPressed: locked ? null : _autoPlace,
                     icon: const Icon(Icons.auto_awesome, size: 18),
-                    label: const Text('Auto'),
+                    label: Text(l10n.auto),
                   ),
                 ),
               ],
@@ -220,10 +222,10 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               icon: Icon(ready ? Icons.check_circle : Icons.flag),
               label: Text(
                 ready
-                    ? 'You are ready'
+                    ? l10n.youAreReady
                     : complete
-                    ? 'I am ready'
-                    : 'Place every ship first',
+                    ? l10n.iAmReady
+                    : l10n.placeEveryShipFirst,
               ),
             ),
             const SizedBox(height: 16),
@@ -505,7 +507,7 @@ class _ShipChip extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              '$length cells',
+              AppLocalizations.of(context).cellsCount(length),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
                 fontWeight: selected ? FontWeight.w600 : null,
@@ -525,6 +527,7 @@ class _CountdownCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final int minutes = remaining ~/ 60;
     final int seconds = remaining % 60;
     final String clock =
@@ -542,13 +545,12 @@ class _CountdownCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'The preparation ends in $clock',
+                    l10n.preparationEndsIn(clock),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'A fleet that is not finished in time is placed '
-                    'automatically.',
+                    l10n.autoPlaceHint,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       height: 1.35,
                     ),
@@ -570,6 +572,7 @@ class _ReadinessCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<PlayerReadiness> players = readiness?.players ?? const [];
 
     return Card(
@@ -579,12 +582,12 @@ class _ReadinessCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Players',
+              l10n.players,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             if (players.isEmpty)
-              const Text('Nobody is in the room yet.')
+              Text(l10n.nobodyInRoom)
             else
               for (final PlayerReadiness player in players)
                 Padding(
@@ -606,7 +609,7 @@ class _ReadinessCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        player.ready ? 'Ready' : 'Placing',
+                        player.ready ? l10n.ready : l10n.placing,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: player.ready
                               ? AppTheme.accent

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/models/room_models.dart';
@@ -32,6 +33,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final bool isHost = session.isHost;
     final int seated = session.snapshot?.players
@@ -46,7 +48,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
     final List<String> liveProblems = _draft.validate();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Room settings')),
+      appBar: AppBar(title: Text(l10n.roomSettings)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -54,17 +56,15 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
             if (!isHost) ...<Widget>[
               _NoticeCard(
                 icon: Icons.lock_outline,
-                message:
-                    'Only the host can change the room settings. You see the '
-                    'current values here.',
+                message: l10n.hostOnlySettingsNotice,
               ),
               const SizedBox(height: 12),
             ],
             _SectionCard(
-              title: 'Board',
+              title: l10n.board,
               children: <Widget>[
                 _StepperRow(
-                  label: 'Rows',
+                  label: l10n.rows,
                   value: _draft.rows,
                   min: RoomConfig.minimumDimension,
                   max: RoomConfig.maximumDimension,
@@ -74,7 +74,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   ),
                 ),
                 _StepperRow(
-                  label: 'Columns',
+                  label: l10n.columns,
                   value: _draft.columns,
                   min: RoomConfig.minimumDimension,
                   max: RoomConfig.maximumDimension,
@@ -87,7 +87,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
             ),
             const SizedBox(height: 12),
             _SectionCard(
-              title: 'Fleet',
+              title: l10n.fleet,
               children: <Widget>[
                 for (final FleetPreset preset in FleetPreset.values)
                   _FleetOption(
@@ -100,10 +100,10 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
             ),
             const SizedBox(height: 12),
             _SectionCard(
-              title: 'Players',
+              title: l10n.players,
               children: <Widget>[
                 _StepperRow(
-                  label: 'Capacity',
+                  label: l10n.capacity,
                   value: _draft.maxPlayers,
                   min: seated > RoomConfig.minimumPlayers
                       ? seated
@@ -118,8 +118,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      '$seated player${seated == 1 ? '' : 's'} already in the '
-                      'room.',
+                      l10n.seatedPlayers(seated),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -127,10 +126,10 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
             ),
             const SizedBox(height: 12),
             _SectionCard(
-              title: 'Timers',
+              title: l10n.timers,
               children: <Widget>[
                 _TimerSlider(
-                  label: 'Preparation',
+                  label: l10n.preparation,
                   value: _draft.placementDurationSeconds,
                   min: RoomConfig.minimumPlacementSeconds,
                   max: RoomConfig.maximumPlacementSeconds,
@@ -141,7 +140,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   ),
                 ),
                 _TimerSlider(
-                  label: 'Each turn',
+                  label: l10n.eachTurn,
                   value: _draft.turnDurationSeconds,
                   min: RoomConfig.minimumTurnSeconds,
                   max: RoomConfig.maximumTurnSeconds,
@@ -173,7 +172,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.check),
-              label: Text(_saving ? 'Saving…' : 'Save settings'),
+              label: Text(_saving ? l10n.saving : l10n.saveSettings),
             ),
             if (isHost) ...<Widget>[
               const SizedBox(height: 8),
@@ -181,7 +180,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                 onPressed: _saving
                     ? null
                     : () => _edit(RoomConfig.defaults),
-                child: const Text('Reset to the default settings'),
+                child: Text(l10n.resetToDefaults),
               ),
             ],
           ],
@@ -262,6 +261,7 @@ class _StepperRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final int current = value;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -271,7 +271,7 @@ class _StepperRow extends StatelessWidget {
             child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
           ),
           IconButton(
-            tooltip: 'Decrease $label',
+            tooltip: l10n.decreaseLabel(label),
             onPressed: enabled && current > min
                 ? () => onChanged(current - 1)
                 : null,
@@ -286,7 +286,7 @@ class _StepperRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Increase $label',
+            tooltip: l10n.increaseLabel(label),
             onPressed: enabled && current < max
                 ? () => onChanged(current + 1)
                 : null,
@@ -313,6 +313,7 @@ class _FleetOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(12),
@@ -331,18 +332,18 @@ class _FleetOption extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    '${preset.label} · ${preset.shipCount} ships',
+                    l10n.fleetOptionLabel(preset.label, preset.shipCount),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    'Lengths ${preset.shipSummary}',
+                    l10n.fleetLengths(preset.shipSummary),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
             Text(
-              '${preset.totalCells} cells',
+              l10n.cellsCount(preset.totalCells),
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ],

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../shared/models/room_models.dart';
@@ -36,6 +37,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final RoomSnapshot? snapshot = session.snapshot;
 
@@ -43,7 +45,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lobby'),
+        title: Text(l10n.lobby),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => _leave(context),
@@ -75,7 +77,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     Row(
                       children: <Widget>[
                         Text(
-                          'Players',
+                          l10n.players,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(width: 8),
@@ -88,9 +90,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                     ),
                     const SizedBox(height: 12),
                     if (snapshot == null)
-                      const Text('Waiting for the room state…')
+                      Text(l10n.waitingForRoomState)
                     else if (snapshot.players.isEmpty)
-                      const Text('Nobody is in the room yet.')
+                      Text(l10n.nobodyInRoom)
                     else
                       for (final PlayerSummary player in snapshot.players)
                         _PlayerRow(
@@ -120,8 +122,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               icon: const Icon(Icons.grid_view_outlined, size: 18),
               label: Text(
                 session.isPlacementReady
-                    ? 'Your fleet is ready'
-                    : 'Prepare your fleet',
+                    ? l10n.yourFleetReady
+                    : l10n.prepareYourFleet,
               ),
             ),
             const SizedBox(height: 12),
@@ -137,7 +139,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               OutlinedButton.icon(
                 onPressed: () => _leave(context),
                 icon: const Icon(Icons.logout, size: 18),
-                label: const Text('Leave room'),
+                label: Text(l10n.leaveRoom),
               ),
             if (session.isHost) ...<Widget>[
               const SizedBox(height: 12),
@@ -145,8 +147,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    'Keep this app open and in the foreground. Closing it ends '
-                    'the room for every player.',
+                    l10n.keepAppOpenLobby,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppTheme.sunk,
                       height: 1.4,
@@ -195,22 +196,20 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Future<void> _kick(BuildContext context, PlayerSummary player) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: Text('Remove ${player.displayName}?'),
-        content: const Text(
-          'They are removed from the room and cannot rejoin with this '
-          'invitation code.',
-        ),
+        title: Text(l10n.removePlayerQuestion(player.displayName)),
+        content: Text(l10n.removePlayerWarning),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
+            child: Text(l10n.remove),
           ),
         ],
       ),
@@ -220,22 +219,20 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   }
 
   Future<void> _closeRoom(BuildContext context) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('End the room?'),
-        content: const Text(
-          'Every player is disconnected and returns to the home screen. The '
-          'room cannot be reopened.',
-        ),
+        title: Text(l10n.endTheRoom),
+        content: Text(l10n.endRoomWarning),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('End room'),
+            child: Text(l10n.endRoom),
           ),
         ],
       ),
@@ -258,6 +255,7 @@ class _InviteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final String code = session.inviteCode ?? '······';
     return Card(
       child: Padding(
@@ -266,7 +264,7 @@ class _InviteCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Invitation code',
+              l10n.invitationCode,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -284,19 +282,19 @@ class _InviteCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Copy the code',
+                  tooltip: l10n.copyTheCode,
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: code));
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invitation code copied.')),
+                      SnackBar(content: Text(l10n.invitationCodeCopied)),
                     );
                   },
                   icon: const Icon(Icons.copy),
                 ),
                 Builder(
                   builder: (BuildContext buttonContext) => IconButton(
-                    tooltip: 'Share the invitation',
+                    tooltip: l10n.shareTheInvitation,
                     onPressed: () => _share(buttonContext, code),
                     icon: const Icon(Icons.ios_share),
                   ),
@@ -304,18 +302,16 @@ class _InviteCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 20),
-            _KeyValue(label: 'Port', value: '${session.hostPort ?? '—'}'),
+            _KeyValue(label: l10n.port, value: '${session.hostPort ?? '—'}'),
             _KeyValue(
-              label: 'Manual address',
+              label: l10n.manualAddress,
               value: session.hostAddresses.isEmpty
-                  ? 'not available'
+                  ? l10n.notAvailable
                   : '${session.hostAddresses.first}:${session.hostPort ?? ''}',
             ),
             const SizedBox(height: 8),
             Text(
-              'Share the code with players on the same Wi-Fi. The code is not '
-              'part of the network announcement, so only the players you tell '
-              'can join.',
+              l10n.shareCodeHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 height: 1.35,
               ),
@@ -328,15 +324,16 @@ class _InviteCard extends StatelessWidget {
 
   /// Opens the system share sheet with the invitation details.
   Future<void> _share(BuildContext context, String code) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final StringBuffer text = StringBuffer()
-      ..writeln('Join my UpFleet Arena room.')
-      ..writeln('Invitation code: $code');
+      ..writeln(l10n.shareJoinLine)
+      ..writeln(l10n.shareCodeLine(code));
     if (session.hostAddresses.isNotEmpty) {
       text.writeln(
-        'Manual address: ${session.hostAddresses.first}:${session.hostPort}',
+        l10n.shareAddressLine('${session.hostAddresses.first}:${session.hostPort}'),
       );
     }
-    text.write('Every player must be on the same Wi-Fi network.');
+    text.write(l10n.shareWifiLine);
 
     final RenderObject? renderObject = context.findRenderObject();
     final Rect? origin = renderObject is RenderBox
@@ -347,14 +344,14 @@ class _InviteCard extends StatelessWidget {
       await SharePlus.instance.share(
         ShareParams(
           text: text.toString(),
-          subject: 'UpFleet Arena invitation',
+          subject: l10n.shareSubject,
           sharePositionOrigin: origin,
         ),
       );
     } on Object {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sharing is not available here.')),
+        SnackBar(content: Text(l10n.sharingNotAvailable)),
       );
     }
   }
@@ -373,6 +370,7 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -383,7 +381,7 @@ class _SettingsCard extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Room settings',
+                    l10n.roomSettings,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -391,32 +389,35 @@ class _SettingsCard extends StatelessWidget {
                   TextButton.icon(
                     onPressed: onEdit,
                     icon: const Icon(Icons.tune, size: 18),
-                    label: const Text('Edit'),
+                    label: Text(l10n.edit),
                   ),
               ],
             ),
             const SizedBox(height: 4),
-            _KeyValue(label: 'Board', value: '${config.rows}×${config.columns}'),
+            _KeyValue(label: l10n.board, value: '${config.rows}×${config.columns}'),
             _KeyValue(
-              label: 'Fleet',
-              value:
-                  '${config.fleetPreset.label} · ${config.fleetPreset.shipCount} '
-                  'ships (${config.fleetPreset.shipSummary})',
+              label: l10n.fleet,
+              value: l10n.fleetSettingsValue(
+                config.fleetPreset.label,
+                config.fleetPreset.shipCount,
+                config.fleetPreset.shipSummary,
+              ),
             ),
             _KeyValue(
-              label: 'Capacity',
-              value: 'up to ${config.maxPlayers} players',
+              label: l10n.capacity,
+              value: l10n.capacityValue(config.maxPlayers),
             ),
             _KeyValue(
-              label: 'Timers',
-              value:
-                  '${config.placementDurationSeconds} s preparation · '
-                  '${config.turnDurationSeconds} s per turn',
+              label: l10n.timers,
+              value: l10n.timersSettingsValue(
+                config.placementDurationSeconds,
+                config.turnDurationSeconds,
+              ),
             ),
             if (!isHost) ...<Widget>[
               const SizedBox(height: 8),
               Text(
-                'Only the host can change these settings.',
+                l10n.onlyHostChangesSettings,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppTheme.sunk,
                 ),
@@ -444,6 +445,7 @@ class _PlayerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -468,7 +470,7 @@ class _PlayerRow extends StatelessWidget {
                     ),
                     if (isViewer)
                       Text(
-                        '  (you)',
+                        l10n.youSuffix,
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                   ],
@@ -483,7 +485,7 @@ class _PlayerRow extends StatelessWidget {
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        _statusLabel(player.status),
+                        _statusLabel(player.status, l10n),
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: _statusColor(player.status),
@@ -495,7 +497,7 @@ class _PlayerRow extends StatelessWidget {
                       const Icon(Icons.check, size: 13, color: AppTheme.accent),
                       const SizedBox(width: 4),
                       Text(
-                        'Ready',
+                        l10n.ready,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: AppTheme.accent,
                         ),
@@ -507,14 +509,14 @@ class _PlayerRow extends StatelessWidget {
             ),
           ),
           if (player.isHost)
-            const Chip(
-              label: Text('Host'),
-              avatar: Icon(Icons.star, size: 16, color: AppTheme.sunk),
+            Chip(
+              label: Text(l10n.host),
+              avatar: const Icon(Icons.star, size: 16, color: AppTheme.sunk),
               visualDensity: VisualDensity.compact,
             ),
           if (canKick)
             IconButton(
-              tooltip: 'Remove ${player.displayName}',
+              tooltip: l10n.removePlayer(player.displayName),
               onPressed: onKick,
               icon: const Icon(Icons.person_remove_outlined),
             ),
@@ -523,11 +525,14 @@ class _PlayerRow extends StatelessWidget {
     );
   }
 
-  static String _statusLabel(PlayerConnectionStatus status) => switch (status) {
-    PlayerConnectionStatus.connected => 'Connected',
-    PlayerConnectionStatus.disconnected => 'Disconnected — may rejoin',
-    PlayerConnectionStatus.left => 'Left the room',
-    PlayerConnectionStatus.kicked => 'Removed by the host',
+  static String _statusLabel(
+    PlayerConnectionStatus status,
+    AppLocalizations l10n,
+  ) => switch (status) {
+    PlayerConnectionStatus.connected => l10n.statusConnected,
+    PlayerConnectionStatus.disconnected => l10n.statusDisconnected,
+    PlayerConnectionStatus.left => l10n.statusLeft,
+    PlayerConnectionStatus.kicked => l10n.statusKicked,
   };
 
   static Color _statusColor(PlayerConnectionStatus status) => switch (status) {
@@ -559,25 +564,25 @@ class _HostActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         FilledButton.icon(
           onPressed: canStart ? onStart : null,
           icon: const Icon(Icons.timer_outlined),
-          label: const Text('Start the preparation'),
+          label: Text(l10n.startPreparation),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: onClose,
           style: OutlinedButton.styleFrom(foregroundColor: AppTheme.danger),
           icon: const Icon(Icons.power_settings_new),
-          label: const Text('End room'),
+          label: Text(l10n.endRoom),
         ),
         const SizedBox(height: 8),
         Text(
-          'When the preparation time runs out, the host places the missing '
-          'ships automatically and the match starts.',
+          l10n.preparationTimeoutHint,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
         ),
@@ -647,7 +652,7 @@ class _ClosedBanner extends StatelessWidget {
                 const SizedBox(height: 8),
                 FilledButton(
                   onPressed: () => context.go('/'),
-                  child: const Text('Back to home'),
+                  child: Text(AppLocalizations.of(context).backToHome),
                 ),
               ],
             ),

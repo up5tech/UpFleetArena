@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/permissions/lan_permission_service.dart';
@@ -53,7 +54,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
   Future<void> _joinManual() async {
     final int? port = int.tryParse(_portController.text.trim());
     if (port == null) {
-      _showMessage('The port must be a number.');
+      _showMessage(AppLocalizations.of(context).portMustBeNumber);
       return;
     }
     await _join(() {
@@ -88,6 +89,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Profile profile = ref.watch(profileProvider);
     final JoinDiscoveryState discovery = ref.watch(
       joinDiscoveryControllerProvider,
@@ -96,7 +98,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
     final bool busy = session.status == RoomSessionStatus.working;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Join room')),
+      appBar: AppBar(title: Text(l10n.joinRoomScreenTitle)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -116,14 +118,14 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                     Expanded(
                       child: Text(
                         profile.displayName.isEmpty
-                            ? 'No nickname yet'
+                            ? l10n.noNicknameYet
                             : profile.displayName,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                     TextButton(
                       onPressed: () => context.push('/profile'),
-                      child: const Text('Edit'),
+                      child: Text(l10n.edit),
                     ),
                   ],
                 ),
@@ -137,7 +139,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Invitation code',
+                      l10n.invitationCode,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
@@ -153,9 +155,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'The host shares this code. It is checked by the host '
-                      'device over the direct connection, never over the '
-                      'network announcement.',
+                      l10n.invitationCodeHint,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),
@@ -177,7 +177,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Nearby rooms',
+                            l10n.nearbyRooms,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
@@ -193,7 +193,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                             }
                           },
                           child: Text(
-                            discovery.isScanning ? 'Stop' : 'Scan',
+                            discovery.isScanning ? l10n.stop : l10n.scan,
                           ),
                         ),
                       ],
@@ -202,9 +202,8 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                     if (discovery.rooms.isEmpty)
                       Text(
                         discovery.isScanning
-                            ? 'Looking for rooms on this Wi-Fi…'
-                            : 'No rooms found yet. Tap Scan, or use the '
-                                  'manual connection below.',
+                            ? l10n.lookingForRooms
+                            : l10n.noRoomsFound,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           height: 1.35,
                         ),
@@ -224,7 +223,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                           ),
                           title: Text(room.label),
                           subtitle: Text(
-                            '${room.preferredAddress?.address ?? 'no address'}'
+                            '${room.preferredAddress?.address ?? l10n.noAddress}'
                             ':${room.port}',
                           ),
                         ),
@@ -236,7 +235,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                           ? null
                           : _joinSelected,
                       icon: const Icon(Icons.login),
-                      label: const Text('Join selected room'),
+                      label: Text(l10n.joinSelectedRoom),
                     ),
                   ],
                 ),
@@ -259,22 +258,21 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Manual connection',
+                            l10n.manualConnection,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
                         TextButton(
                           onPressed: () =>
                               setState(() => _showManual = !_showManual),
-                          child: Text(_showManual ? 'Hide' : 'Show'),
+                          child: Text(_showManual ? l10n.hide : l10n.show),
                         ),
                       ],
                     ),
                     if (_showManual) ...<Widget>[
                       const SizedBox(height: 8),
                       Text(
-                        'Use this when the router blocks discovery. Enter the '
-                        'IPv4 address and the port shown on the host device.',
+                        l10n.manualConnectionHint,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           height: 1.35,
                         ),
@@ -287,8 +285,8 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                             child: TextField(
                               controller: _hostController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Host IPv4',
+                              decoration: InputDecoration(
+                                labelText: l10n.hostIpv4,
                                 hintText: '192.168.1.20',
                               ),
                             ),
@@ -298,8 +296,8 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                             child: TextField(
                               controller: _portController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Port',
+                              decoration: InputDecoration(
+                                labelText: l10n.port,
                               ),
                             ),
                           ),
@@ -309,7 +307,7 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> {
                       OutlinedButton.icon(
                         onPressed: busy ? null : _joinManual,
                         icon: const Icon(Icons.bolt, size: 18),
-                        label: const Text('Connect manually'),
+                        label: Text(l10n.connectManually),
                       ),
                     ],
                   ],
@@ -330,6 +328,7 @@ class _TroubleshootingCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final LanPermissionService service = ref.read(lanPermissionServiceProvider);
     return Card(
       child: Padding(
@@ -338,7 +337,7 @@ class _TroubleshootingCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Nothing found?',
+              l10n.nothingFound,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -362,9 +361,7 @@ class _TroubleshootingCard extends ConsumerWidget {
               ),
             const SizedBox(height: 6),
             Text(
-              'The router may isolate clients from each other. The manual '
-              'connection above uses a direct TCP link, so it sometimes works '
-              'when discovery is filtered.',
+              l10n.routerIsolationHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppTheme.sunk,
                 height: 1.35,

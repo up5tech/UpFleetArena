@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/settings/app_locale.dart';
+import '../l10n/generated/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 
@@ -15,6 +17,9 @@ class UpFleetArenaApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       routerConfig: AppRouter.router,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: ref.watch(appLocaleProvider),
     );
   }
 }

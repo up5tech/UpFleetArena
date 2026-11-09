@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/features/placement/presentation/placement_screen.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/widgets/board_canvas.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
 import 'package:upfleet_arena/game_engine/placement/placement.dart';
@@ -76,7 +77,12 @@ Widget _app(_FakeSessionController controller) {
     overrides: [
       roomSessionControllerProvider.overrideWith(() => controller),
     ],
-    child: const MaterialApp(home: PlacementScreen()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      home: const PlacementScreen(),
+    ),
   );
 }
 

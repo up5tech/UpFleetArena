@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../game_engine/combat/combat.dart';
@@ -22,6 +23,7 @@ class SpectatorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<MatchPlayerView> living = snapshot.players
         .where((MatchPlayerView player) => player.alive)
         .toList();
@@ -48,12 +50,12 @@ class SpectatorView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Your fleet was sunk.',
+                      l10n.yourFleetWasSunk,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'You are watching the rest of the match. You cannot fire.',
+                      l10n.spectatorWatching,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),
@@ -78,13 +80,17 @@ class SpectatorView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          '${snapshot.playerById(snapshot.activePlayerId)?.displayName ?? 'A player'} is shooting',
+                          l10n.playerIsShooting(
+                            snapshot.playerById(snapshot.activePlayerId)?.displayName ??
+                                l10n.aPlayer,
+                          ),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Turn ${snapshot.turnNumber}'
-                          '${remaining == null ? '' : ' · ${remaining}s left'}',
+                          remaining == null
+                              ? l10n.turnLabel(snapshot.turnNumber)
+                              : l10n.turnLabelWithTime(snapshot.turnNumber, remaining),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -96,12 +102,12 @@ class SpectatorView extends StatelessWidget {
           ),
         const SizedBox(height: 20),
         Text(
-          'Still in the match',
+          l10n.stillInTheMatch,
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
         if (living.isEmpty)
-          const Text('Nobody is left.')
+          Text(l10n.nobodyIsLeft)
         else
           for (final MatchPlayerView player in living)
             Padding(
@@ -114,17 +120,17 @@ class SpectatorView extends StatelessWidget {
                     child: Text(player.displayName),
                   ),
                   Text(
-                    '${player.shipsRemaining} ships left',
+                    l10n.shipsLeftCount(player.shipsRemaining),
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
                 ],
               ),
             ),
         const SizedBox(height: 20),
-        Text('Public activity', style: Theme.of(context).textTheme.titleMedium),
+        Text(l10n.publicActivity, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (feed.isEmpty)
-          const Text('No public shots yet.')
+          Text(l10n.noPublicShots)
         else
           for (final PublicActivity activity in feed)
             Padding(
@@ -148,7 +154,7 @@ class SpectatorView extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _describe(activity),
+                      _describe(l10n, activity),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         height: 1.35,
                       ),
@@ -159,23 +165,22 @@ class SpectatorView extends StatelessWidget {
             ),
         const SizedBox(height: 16),
         Text(
-          'Spectators see no coordinates and no enemy fleet. Your own board '
-          'stays available in the next tab.',
+          l10n.spectatorHint,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
         ),
       ],
     );
   }
 
-  String _describe(PublicActivity activity) {
+  String _describe(AppLocalizations l10n, PublicActivity activity) {
     final String attacker =
-        snapshot.playerById(activity.attackerPlayerId)?.displayName ?? 'A player';
+        snapshot.playerById(activity.attackerPlayerId)?.displayName ?? l10n.aPlayer;
     final String target =
-        snapshot.playerById(activity.targetPlayerId)?.displayName ?? 'another player';
+        snapshot.playerById(activity.targetPlayerId)?.displayName ?? l10n.anotherPlayer;
     return switch (activity.result) {
-      ShotResult.miss => '$attacker missed $target.',
-      ShotResult.hit => '$attacker hit $target.',
-      ShotResult.shipSunk => '$attacker sank a ship of $target.',
+      ShotResult.miss => l10n.activityMissed(attacker, target),
+      ShotResult.hit => l10n.activityHit(attacker, target),
+      ShotResult.shipSunk => l10n.activitySunk(attacker, target),
     };
   }
 }

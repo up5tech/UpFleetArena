@@ -13,6 +13,7 @@ import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart
 import 'package:upfleet_arena/game_engine/board/board.dart';
 import 'package:upfleet_arena/game_engine/combat/combat.dart';
 import 'package:upfleet_arena/game_engine/placement/placement.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/models/match_models.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
 import 'package:upfleet_arena/shared/widgets/board_canvas.dart';
@@ -149,7 +150,12 @@ Widget _app(_FakeSessionController controller) {
       ),
       soundPlayerProvider.overrideWithValue(_NoopSoundPlayer()),
     ],
-    child: const MaterialApp(home: MatchScreen()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      home: const MatchScreen(),
+    ),
   );
 }
 
@@ -375,6 +381,9 @@ void main() {
           soundPlayerProvider.overrideWithValue(_NoopSoundPlayer()),
         ],
         child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
           routerConfig: GoRouter(
             initialLocation: '/match',
             routes: <RouteBase>[

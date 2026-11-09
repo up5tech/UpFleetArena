@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/config/app_config.dart';
@@ -14,15 +15,16 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('UpFleet Arena'),
+        title: Text(l10n.appTitle),
         actions: <Widget>[
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Text(
-                'LAN only · no backend',
+                l10n.lanOnlyNoBackend,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -37,43 +39,43 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _PhaseEntry(
               icon: Icons.lan_outlined,
-              title: 'LAN Lab',
-              subtitle: 'Discovery + TCP proof of concept (Phase 0)',
+              title: l10n.lanLab,
+              subtitle: l10n.lanLabSubtitle,
               onTap: () => context.go('/lan-lab'),
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.add_home_work_outlined,
-              title: 'Create Room',
-              subtitle: 'Host a room and share the invitation code',
+              title: l10n.createRoom,
+              subtitle: l10n.createRoomSubtitle,
               onTap: () => context.go('/create-room'),
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.login_outlined,
-              title: 'Join Room',
-              subtitle: 'Find a nearby room and join with the code',
+              title: l10n.joinRoom,
+              subtitle: l10n.joinRoomSubtitle,
               onTap: () => context.go('/join-room'),
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.people_outline,
-              title: 'Lobby',
-              subtitle: 'Reached from Create Room or Join Room',
+              title: l10n.lobby,
+              subtitle: l10n.lobbySubtitle,
               enabled: false,
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.grid_view_outlined,
-              title: 'Ship Placement',
-              subtitle: 'Reached from the lobby — private board and fleet',
+              title: l10n.shipPlacement,
+              subtitle: l10n.shipPlacementSubtitle,
               enabled: false,
             ),
             const SizedBox(height: 8),
             _PhaseEntry(
               icon: Icons.gps_fixed,
-              title: 'Battle',
-              subtitle: 'Phase 5 — turn-based combat',
+              title: l10n.battle,
+              subtitle: l10n.battleSubtitle,
               enabled: false,
             ),
             const SizedBox(height: 24),
@@ -88,6 +90,7 @@ class HomeScreen extends StatelessWidget {
 class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -95,14 +98,12 @@ class _HeroCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Turn-based naval combat\nfor the same Wi-Fi',
+              l10n.heroTitle,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 10),
             Text(
-              'Every player places a private fleet, then takes turns firing at '
-              'the others. The room host runs the whole game on their phone — '
-              'no server, no account, no Internet connection required.',
+              l10n.heroBody,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.textSecondary,
                 height: 1.4,
@@ -158,7 +159,7 @@ class _PhaseEntry extends StatelessWidget {
         ),
         trailing: enabled
             ? const Icon(Icons.chevron_right, color: AppTheme.textSecondary)
-            : const Chip(label: Text('Later')),
+            : Chip(label: Text(AppLocalizations.of(context).later)),
       ),
     );
   }
@@ -169,16 +170,22 @@ class _ConstraintsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final List<(String, String)> constraints = <(String, String)>[
-      ('Network', '${AppConfig.networkMode} · ${AppConfig.topology}'),
-      ('Discovery', '${AppConfig.discovery} · _upfleet._tcp'),
-      ('Players', '${AppConfig.minimumPlayers}–${AppConfig.recommendedMaximumPlayers}'),
-      ('Board', '${AppConfig.defaultBoardRows}×${AppConfig.defaultBoardColumns}'),
-      ('Fleet', 'Standard · ${AppConfig.standardFleetShipLengths.join('-')}'),
+      (l10n.network, '${AppConfig.networkMode} · ${AppConfig.topology}'),
+      (l10n.discovery, '${AppConfig.discovery} · _upfleet._tcp'),
+      (l10n.players, '${AppConfig.minimumPlayers}–${AppConfig.recommendedMaximumPlayers}'),
+      (l10n.board, '${AppConfig.defaultBoardRows}×${AppConfig.defaultBoardColumns}'),
       (
-        'Timers',
-        '${AppConfig.placementDurationSeconds}s placement · '
-            '${AppConfig.turnDurationSeconds}s turn',
+        l10n.fleet,
+        l10n.fleetConstraintValue(AppConfig.standardFleetShipLengths.join('-')),
+      ),
+      (
+        l10n.timers,
+        l10n.timersConstraintValue(
+          AppConfig.placementDurationSeconds,
+          AppConfig.turnDurationSeconds,
+        ),
       ),
     ];
 
@@ -188,7 +195,7 @@ class _ConstraintsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Frozen defaults', style: Theme.of(context).textTheme.titleMedium),
+            Text(l10n.frozenDefaults, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             for (final (String label, String value) in constraints)
               Padding(
@@ -214,8 +221,7 @@ class _ConstraintsCard extends StatelessWidget {
               ),
             const SizedBox(height: 10),
             Text(
-              'Host exit ends the room for every player. There is no host '
-              'migration and no Internet fallback.',
+              l10n.hostExitWarning,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppTheme.textSecondary,
                 height: 1.35,
