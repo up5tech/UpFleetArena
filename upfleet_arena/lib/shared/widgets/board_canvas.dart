@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../game_engine/board/board.dart';
@@ -87,43 +88,47 @@ class BoardCanvas extends StatelessWidget {
         }
 
         return Center(
-          child: SizedBox(
-            width: cellSize * columns,
-            height: cellSize * rows,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (TapDownDetails details) {
-                final CellCoord? cell = cellAt(details.localPosition);
-                if (cell != null) onCellPreview?.call(cell);
-              },
-              onTapUp: (TapUpDetails details) {
-                final CellCoord? cell = cellAt(details.localPosition);
-                if (cell != null) onCellCommit?.call(cell);
-              },
-              onTapCancel: onPreviewCleared,
-              onPanStart: (DragStartDetails details) {
-                final CellCoord? cell = cellAt(details.localPosition);
-                if (cell != null) onCellPreview?.call(cell);
-              },
-              onPanUpdate: (DragUpdateDetails details) {
-                final CellCoord? cell = cellAt(details.localPosition);
-                if (cell != null) {
-                  onCellPreview?.call(cell);
-                } else {
-                  onPreviewCleared?.call();
-                }
-              },
-              onPanEnd: (DragEndDetails details) => onDragEnd?.call(),
-              child: CustomPaint(
-                painter: BoardPainter(
-                  rows: rows,
-                  columns: columns,
-                  ships: ships,
-                  shots: shots,
-                  misses: misses,
-                  sunkShips: sunkShips,
-                  preview: preview,
-                  previewIsValid: previewIsValid,
+          child: Semantics(
+            label: AppLocalizations.of(context).ownBoardSemantics(rows, columns),
+            container: true,
+            child: SizedBox(
+              width: cellSize * columns,
+              height: cellSize * rows,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (TapDownDetails details) {
+                  final CellCoord? cell = cellAt(details.localPosition);
+                  if (cell != null) onCellPreview?.call(cell);
+                },
+                onTapUp: (TapUpDetails details) {
+                  final CellCoord? cell = cellAt(details.localPosition);
+                  if (cell != null) onCellCommit?.call(cell);
+                },
+                onTapCancel: onPreviewCleared,
+                onPanStart: (DragStartDetails details) {
+                  final CellCoord? cell = cellAt(details.localPosition);
+                  if (cell != null) onCellPreview?.call(cell);
+                },
+                onPanUpdate: (DragUpdateDetails details) {
+                  final CellCoord? cell = cellAt(details.localPosition);
+                  if (cell != null) {
+                    onCellPreview?.call(cell);
+                  } else {
+                    onPreviewCleared?.call();
+                  }
+                },
+                onPanEnd: (DragEndDetails details) => onDragEnd?.call(),
+                child: CustomPaint(
+                  painter: BoardPainter(
+                    rows: rows,
+                    columns: columns,
+                    ships: ships,
+                    shots: shots,
+                    misses: misses,
+                    sunkShips: sunkShips,
+                    preview: preview,
+                    previewIsValid: previewIsValid,
+                  ),
                 ),
               ),
             ),

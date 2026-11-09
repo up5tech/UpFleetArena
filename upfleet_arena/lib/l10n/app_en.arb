@@ -392,5 +392,20 @@
   "nobodyIsLeft": "Nobody is left.",
   "publicActivity": "Public activity",
   "noPublicShots": "No public shots yet.",
-  "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab."
+  "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.",
+
+  "targetBoardSemantics": "Target board, {rows} rows by {columns} columns. Tap a cell to select it.",
+  "@targetBoardSemantics": {
+    "placeholders": {
+      "rows": { "type": "int" },
+      "columns": { "type": "int" }
+    }
+  },
+  "ownBoardSemantics": "Your board, {rows} rows by {columns} columns.",
+  "@ownBoardSemantics": {
+    "placeholders": {
+      "rows": { "type": "int" },
+      "columns": { "type": "int" }
+    }
+  }
 }

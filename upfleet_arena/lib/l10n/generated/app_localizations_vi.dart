@@ -715,4 +715,14 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get spectatorHint =>
       'Người xem không thấy tọa độ và không thấy hạm đội đối phương. Bàn của bạn vẫn khả dụng ở tab kế tiếp.';
+
+  @override
+  String targetBoardSemantics(int rows, int columns) {
+    return 'Bàn mục tiêu, $rows hàng và $columns cột. Chạm một ô để chọn.';
+  }
+
+  @override
+  String ownBoardSemantics(int rows, int columns) {
+    return 'Bàn của bạn, $rows hàng và $columns cột.';
+  }
 }

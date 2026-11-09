@@ -217,5 +217,8 @@
   "nobodyIsLeft": "Không còn ai.",
   "publicActivity": "Hoạt động công khai",
   "noPublicShots": "Chưa có phát bắn công khai nào.",
-  "spectatorHint": "Người xem không thấy tọa độ và không thấy hạm đội đối phương. Bàn của bạn vẫn khả dụng ở tab kế tiếp."
+  "spectatorHint": "Người xem không thấy tọa độ và không thấy hạm đội đối phương. Bàn của bạn vẫn khả dụng ở tab kế tiếp.",
+
+  "targetBoardSemantics": "Bàn mục tiêu, {rows} hàng và {columns} cột. Chạm một ô để chọn.",
+  "ownBoardSemantics": "Bàn của bạn, {rows} hàng và {columns} cột."
 }

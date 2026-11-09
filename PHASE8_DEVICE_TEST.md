@@ -4,7 +4,11 @@
 > declarations are in place, runtime permission handling is wired into the
 > discovery flow, denied and empty discovery states are surfaced, manual IP/port
 > fallback remains available, and the Host foreground warning is shown in the
-> Create Room flow.
+> Create Room flow. The Host also holds a screen wakelock while hosting
+> (§4.3), shot/result sound effects and haptics respect independent toggles
+> (§5.3), reduced motion shortens animations (§5.2), the UI is localized to
+> English and Vietnamese with a language selector, and boards/avatars expose
+> screen-reader labels (see `docs/ACCESSIBILITY.md`).
 >
 > The acceptance criteria of PLAN.md §15 Phase 8 need **2 physical devices on
 > one Wi-Fi network**, plus permission prompts on first run. This file is the

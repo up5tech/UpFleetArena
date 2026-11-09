@@ -257,24 +257,31 @@ class _AvatarOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 52,
-        height: 52,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.accent.withValues(alpha: 0.18)
-              : AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppTheme.accent : AppTheme.surfaceBorder,
-            width: selected ? 2 : 1,
+    return Semantics(
+      label: '${AppLocalizations.of(context).avatar} $avatar',
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 52,
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.accent.withValues(alpha: 0.18)
+                : AppTheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppTheme.accent : AppTheme.surfaceBorder,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: ExcludeSemantics(
+            child: Text(avatar, style: const TextStyle(fontSize: 24)),
           ),
         ),
-        child: Text(avatar, style: const TextStyle(fontSize: 24)),
       ),
     );
   }

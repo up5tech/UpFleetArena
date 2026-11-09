@@ -1333,6 +1333,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.'**
   String get spectatorHint;
+
+  /// No description provided for @targetBoardSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Target board, {rows} rows by {columns} columns. Tap a cell to select it.'**
+  String targetBoardSemantics(int rows, int columns);
+
+  /// No description provided for @ownBoardSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Your board, {rows} rows by {columns} columns.'**
+  String ownBoardSemantics(int rows, int columns);
 }
 
 class _AppLocalizationsDelegate

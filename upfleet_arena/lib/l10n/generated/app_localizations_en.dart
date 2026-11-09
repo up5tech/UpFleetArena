@@ -720,4 +720,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get spectatorHint =>
       'Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.';
+
+  @override
+  String targetBoardSemantics(int rows, int columns) {
+    return 'Target board, $rows rows by $columns columns. Tap a cell to select it.';
+  }
+
+  @override
+  String ownBoardSemantics(int rows, int columns) {
+    return 'Your board, $rows rows by $columns columns.';
+  }
 }

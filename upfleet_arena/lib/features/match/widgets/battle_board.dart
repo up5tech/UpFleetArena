@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../game_engine/board/board.dart';
@@ -65,23 +66,27 @@ class BattleBoard extends StatelessWidget {
         }
 
         return Center(
-          child: SizedBox(
-            width: cellSize * columns,
-            height: cellSize * rows,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: enabled
-                  ? (TapDownDetails details) {
-                      final CellCoord? cell = cellAt(details.localPosition);
-                      if (cell != null) onCellTapped?.call(cell);
-                    }
-                  : null,
-              child: CustomPaint(
-                painter: BattleBoardPainter(
-                  rows: rows,
-                  columns: columns,
-                  shots: shots,
-                  selectedCell: selectedCell,
+          child: Semantics(
+            label: AppLocalizations.of(context).targetBoardSemantics(rows, columns),
+            container: true,
+            child: SizedBox(
+              width: cellSize * columns,
+              height: cellSize * rows,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: enabled
+                    ? (TapDownDetails details) {
+                        final CellCoord? cell = cellAt(details.localPosition);
+                        if (cell != null) onCellTapped?.call(cell);
+                      }
+                    : null,
+                child: CustomPaint(
+                  painter: BattleBoardPainter(
+                    rows: rows,
+                    columns: columns,
+                    shots: shots,
+                    selectedCell: selectedCell,
+                  ),
                 ),
               ),
             ),

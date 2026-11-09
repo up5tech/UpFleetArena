@@ -64,5 +64,6 @@ flutter test
 - [GAME_RULES.md](GAME_RULES.md) — frozen game rules
 - [LAN_PROTOCOL.md](LAN_PROTOCOL.md) — protocol specification
 - [SECURITY_REVIEW.md](SECURITY_REVIEW.md) — security review
+- [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) — accessibility checklist
 - [docs/adr](docs/adr) — architecture decisions
 - [upfleet_arena/README.md](upfleet_arena/README.md) — Flutter starter notes
