@@ -659,7 +659,7 @@ abstract class AppLocalizations {
   /// No description provided for @soundEffectsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Shot, hit and result sounds'**
+  /// **'Shot, hit, result and last-seconds turn warning sounds'**
   String get soundEffectsSubtitle;
 
   /// No description provided for @hapticFeedback.

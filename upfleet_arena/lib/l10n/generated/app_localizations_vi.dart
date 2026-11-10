@@ -322,7 +322,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get soundEffects => 'Hiệu ứng âm thanh';
 
   @override
-  String get soundEffectsSubtitle => 'Âm thanh bắn, trúng và kết quả';
+  String get soundEffectsSubtitle =>
+      'Âm thanh bắn, trúng, kết quả và cảnh báo sắp hết lượt';
 
   @override
   String get hapticFeedback => 'Phản hồi rung';

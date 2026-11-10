@@ -323,7 +323,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get soundEffects => 'Sound effects';
 
   @override
-  String get soundEffectsSubtitle => 'Shot, hit and result sounds';
+  String get soundEffectsSubtitle =>
+      'Shot, hit, result and last-seconds turn warning sounds';
 
   @override
   String get hapticFeedback => 'Haptic feedback';

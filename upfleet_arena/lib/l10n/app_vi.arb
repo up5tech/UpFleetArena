@@ -103,7 +103,7 @@
   "avatar": "Ảnh đại diện",
   "soundAndEffects": "Âm thanh & hiệu ứng",
   "soundEffects": "Hiệu ứng âm thanh",
-  "soundEffectsSubtitle": "Âm thanh bắn, trúng và kết quả",
+  "soundEffectsSubtitle": "Âm thanh bắn, trúng, kết quả và cảnh báo sắp hết lượt",
   "hapticFeedback": "Phản hồi rung",
   "hapticFeedbackSubtitle": "Rung khi bắn và khi có kết quả",
   "reduceMotion": "Giảm chuyển động",
