@@ -16,6 +16,8 @@ Future<BotDifficulty?> showAddBotDialog(BuildContext context) {
     context: context,
     builder: (BuildContext dialogContext) => StatefulBuilder(
       builder: (BuildContext context, StateSetter setDialogState) => AlertDialog(
+        // Leaves more room for the hint text on narrow phones.
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         title: Text(l10n.addComputerTitle),
         content: SingleChildScrollView(
           child: Column(
@@ -24,29 +26,16 @@ Future<BotDifficulty?> showAddBotDialog(BuildContext context) {
             children: <Widget>[
               Text(
                 l10n.chooseDifficulty,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(height: 1.35),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               for (final BotDifficulty option in BotDifficulty.values)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    botDifficultyIcon(option),
-                    color: difficulty == option
-                        ? AppTheme.accent
-                        : AppTheme.textSecondary,
-                  ),
-                  title: Text(botDifficultyLabel(l10n, option)),
-                  subtitle: Text(botDifficultyHint(l10n, option)),
-                  trailing: Icon(
-                    difficulty == option
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: difficulty == option
-                        ? AppTheme.accent
-                        : AppTheme.textSecondary,
-                    size: 18,
-                  ),
+                _DifficultyChoice(
+                  label: botDifficultyLabel(l10n, option),
+                  hint: botDifficultyHint(l10n, option),
+                  selected: difficulty == option,
                   onTap: () => setDialogState(() => difficulty = option),
                 ),
             ],
@@ -65,4 +54,67 @@ Future<BotDifficulty?> showAddBotDialog(BuildContext context) {
       ),
     ),
   );
+}
+
+/// One strength option: the radio marker plus the label and its explanation.
+///
+/// A plain row rather than a [ListTile], so the explanation gets the full
+/// dialog width instead of being squeezed between leading and trailing icons.
+class _DifficultyChoice extends StatelessWidget {
+  const _DifficultyChoice({
+    required this.label,
+    required this.hint,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String hint;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textPrimary,
+                        fontWeight: selected ? FontWeight.w600 : null,
+                      ),
+                    ),
+                    Text(
+                      hint,
+                      style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

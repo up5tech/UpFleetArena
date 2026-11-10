@@ -659,7 +659,7 @@ abstract class AppLocalizations {
   /// No description provided for @soundEffectsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Shot, hit, result and last-seconds turn warning sounds'**
+  /// **'Shots, hits, results and turn warnings'**
   String get soundEffectsSubtitle;
 
   /// No description provided for @hapticFeedback.
@@ -683,7 +683,7 @@ abstract class AppLocalizations {
   /// No description provided for @reduceMotionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Shorten animations; the system setting is also honored'**
+  /// **'Shorter animations, following the system setting'**
   String get reduceMotionSubtitle;
 
   /// No description provided for @saveProfile.

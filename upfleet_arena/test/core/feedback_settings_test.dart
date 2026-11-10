@@ -191,5 +191,55 @@ void main() {
       // Haptics stay untouched.
       expect(preferences.getBool('settings.hapticsEnabled'), isNull);
     });
+
+    testWidgets('long subtitles wrap cleanly on a narrow phone', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final SharedPreferences preferences =
+          await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localPreferencesProvider.overrideWithValue(
+              LocalPreferences.withInstance(preferences),
+            ),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('vi'),
+            home: const ProfileScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Âm thanh & hiệu ứng'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      // Nothing overflows and every switch keeps its explanation on screen.
+      expect(tester.takeException(), isNull);
+      final Finder soundTile = find.widgetWithText(
+        SwitchListTile,
+        'Hiệu ứng âm thanh',
+      );
+      final Finder subtitle = find.text(
+        'Bắn, trúng, kết quả và cảnh báo sắp hết lượt',
+      );
+      expect(subtitle, findsOneWidget);
+      final Rect tileRect = tester.getRect(soundTile);
+      final Rect subtitleRect = tester.getRect(subtitle);
+      expect(tileRect.contains(subtitleRect.topLeft), isTrue);
+      expect(tileRect.contains(subtitleRect.bottomRight), isTrue);
+    });
   });
 }

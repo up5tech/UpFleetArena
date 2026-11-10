@@ -126,7 +126,9 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       l10n.seatedPlayers(seated),
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(height: 1.35),
                     ),
                   ),
               ],
@@ -156,7 +158,9 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     l10n.computerSettingsHint,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(height: 1.35),
                   ),
                 ),
               ],
@@ -374,7 +378,9 @@ class _DifficultyOption extends StatelessWidget {
                   ),
                   Text(
                     botDifficultyHint(l10n, difficulty),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(height: 1.35),
                   ),
                 ],
               ),
@@ -428,7 +434,9 @@ class _FleetOption extends StatelessWidget {
                   ),
                   Text(
                     l10n.fleetLengths(preset.shipSummary),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(height: 1.35),
                   ),
                 ],
               ),

@@ -172,4 +172,30 @@ void main() {
     expect(controller.addedDifficulty, BotDifficulty.hard);
     expect(controller.addedName, 'Máy (Khó)');
   });
+
+  testWidgets('the list fits a 320 px phone with a seated computer', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 3000);
+    tester.view.devicePixelRatio = 1;
+
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(
+            players: const <PlayerSummary>[_host, _guest, _computer],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The role badges wrap onto their own line instead of squeezing the names.
+    expect(tester.takeException(), isNull);
+    expect(tester.getRect(find.text('Host')).width, greaterThan(40));
+    expect(tester.getRect(find.text('Guest')).width, greaterThan(40));
+
+    // The invitation code stays on a single line next to the icon buttons.
+    expect(tester.getRect(find.text('ABC234')).height, lessThan(50));
+  });
 }

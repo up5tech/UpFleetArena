@@ -323,7 +323,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get soundEffectsSubtitle =>
-      'Âm thanh bắn, trúng, kết quả và cảnh báo sắp hết lượt';
+      'Bắn, trúng, kết quả và cảnh báo sắp hết lượt';
 
   @override
   String get hapticFeedback => 'Phản hồi rung';
@@ -335,8 +335,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reduceMotion => 'Giảm chuyển động';
 
   @override
-  String get reduceMotionSubtitle =>
-      'Rút ngắn hiệu ứng; cũng tôn trọng cài đặt hệ thống';
+  String get reduceMotionSubtitle => 'Hiệu ứng ngắn hơn, theo cài đặt hệ thống';
 
   @override
   String get saveProfile => 'Lưu hồ sơ';

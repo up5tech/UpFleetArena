@@ -78,13 +78,16 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Row(
+                    // A Wrap keeps the count from pushing the title off a
+                    // narrow header when the text scale is raised.
+                    Wrap(
+                      spacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: <Widget>[
                         Text(
                           l10n.players,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(width: 8),
                         Text(
                           '${snapshot?.players.length ?? 0}'
                           '/${snapshot?.config.maxPlayers ?? 0}',
@@ -313,13 +316,20 @@ class _InviteCard extends StatelessWidget {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
-                    code,
-                    style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 6,
-                      color: AppTheme.accent,
+                  // The code has to stay on one line: on a 320 px phone the
+                  // full spacing does not fit next to the two icon buttons.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      code,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 6,
+                        color: AppTheme.accent,
+                      ),
                     ),
                   ),
                 ),
@@ -526,53 +536,76 @@ class _PlayerRow extends StatelessWidget {
                       ),
                   ],
                 ),
-                Row(
+                // The status and the role badges share one wrapping line:
+                // on a 320 px phone they would otherwise squeeze the name
+                // down to nothing.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
-                    Icon(
-                      _statusIcon(player.status),
-                      size: 13,
-                      color: _statusColor(player.status),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          _statusIcon(player.status),
+                          size: 13,
+                          color: _statusColor(player.status),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            _statusLabel(player.status, l10n),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: _statusColor(player.status)),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        _statusLabel(player.status, l10n),
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(color: _statusColor(player.status)),
+                    if (player.ready)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(
+                            Icons.check,
+                            size: 13,
+                            color: AppTheme.accent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            l10n.ready,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: AppTheme.accent),
+                          ),
+                        ],
                       ),
-                    ),
-                    if (player.ready) ...<Widget>[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.check, size: 13, color: AppTheme.accent),
-                      const SizedBox(width: 4),
-                      Text(
-                        l10n.ready,
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(color: AppTheme.accent),
+                    if (player.isHost)
+                      Chip(
+                        label: Text(l10n.host),
+                        avatar: const Icon(
+                          Icons.star,
+                          size: 16,
+                          color: AppTheme.sunk,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    ],
+                    if (player.isBot)
+                      Chip(
+                        label: Text(l10n.computer),
+                        avatar: const Icon(
+                          Icons.smart_toy_outlined,
+                          size: 16,
+                          color: AppTheme.sunk,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                   ],
                 ),
               ],
             ),
           ),
-          if (player.isHost)
-            Chip(
-              label: Text(l10n.host),
-              avatar: const Icon(Icons.star, size: 16, color: AppTheme.sunk),
-              visualDensity: VisualDensity.compact,
-            ),
-          if (player.isBot)
-            Chip(
-              label: Text(l10n.computer),
-              avatar: const Icon(
-                Icons.smart_toy_outlined,
-                size: 16,
-                color: AppTheme.sunk,
-              ),
-              visualDensity: VisualDensity.compact,
-            ),
           if (canKick)
             IconButton(
               tooltip: l10n.removePlayer(player.displayName),
@@ -775,7 +808,12 @@ class _KeyValue extends StatelessWidget {
         children: <Widget>[
           SizedBox(
             width: 118,
-            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(height: 1.35),
+            ),
           ),
           Expanded(
             child: Text(

@@ -69,6 +69,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final FeedbackSettingsController feedbackController = ref.read(
       feedbackSettingsProvider.notifier,
     );
+    // Long explanations wrap over several lines on narrow phones; the default
+    // tile subtitle style packs those lines too tightly to read comfortably.
+    final TextStyle? switchSubtitleStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(height: 1.35);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.yourProfile)),
@@ -163,7 +168,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(l10n.soundEffects),
-                      subtitle: Text(l10n.soundEffectsSubtitle),
+                      subtitle: Text(
+                        l10n.soundEffectsSubtitle,
+                        style: switchSubtitleStyle,
+                      ),
                       value: feedback.soundEnabled,
                       onChanged: (bool value) =>
                           feedbackController.setSoundEnabled(value),
@@ -171,7 +179,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(l10n.hapticFeedback),
-                      subtitle: Text(l10n.hapticFeedbackSubtitle),
+                      subtitle: Text(
+                        l10n.hapticFeedbackSubtitle,
+                        style: switchSubtitleStyle,
+                      ),
                       value: feedback.hapticsEnabled,
                       onChanged: (bool value) =>
                           feedbackController.setHapticsEnabled(value),
@@ -179,7 +190,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(l10n.reduceMotion),
-                      subtitle: Text(l10n.reduceMotionSubtitle),
+                      subtitle: Text(
+                        l10n.reduceMotionSubtitle,
+                        style: switchSubtitleStyle,
+                      ),
                       value: feedback.reducedMotion,
                       onChanged: (bool value) =>
                           feedbackController.setReducedMotion(value),

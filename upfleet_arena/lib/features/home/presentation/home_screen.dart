@@ -188,7 +188,12 @@ class _PhaseEntry extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        subtitle: Text(
+          subtitle,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(height: 1.35),
+        ),
         trailing: const Icon(
           Icons.chevron_right,
           color: AppTheme.textSecondary,

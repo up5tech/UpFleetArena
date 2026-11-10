@@ -224,4 +224,26 @@ void main() {
     expect(controller.saved!.botDifficulty, BotDifficulty.hard);
     expect(find.text('home'), findsOneWidget);
   });
+
+  testWidgets('hints keep their spacing on a narrow phone', (
+    WidgetTester tester,
+  ) async {
+    final TestWidgetsFlutterBinding binding =
+        TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first.physicalSize = const Size(320, 2400);
+    binding.platformDispatcher.views.first.devicePixelRatio = 1;
+
+    await tester.pumpWidget(_app(_hostSession()));
+    await tester.pumpAndSettle();
+
+    // Everything is laid out without a cramped or overflowing line.
+    expect(tester.takeException(), isNull);
+    final Finder hint = find.text(
+      'Computers join as soon as you save and place their own fleet. They take '
+      'a real seat, so the room capacity still applies.',
+    );
+    expect(hint, findsOneWidget);
+    final Rect hintRect = tester.getRect(hint);
+    expect(hintRect.width, greaterThan(200));
+  });
 }

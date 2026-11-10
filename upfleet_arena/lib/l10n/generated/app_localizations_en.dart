@@ -323,8 +323,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get soundEffects => 'Sound effects';
 
   @override
-  String get soundEffectsSubtitle =>
-      'Shot, hit, result and last-seconds turn warning sounds';
+  String get soundEffectsSubtitle => 'Shots, hits, results and turn warnings';
 
   @override
   String get hapticFeedback => 'Haptic feedback';
@@ -337,7 +336,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reduceMotionSubtitle =>
-      'Shorten animations; the system setting is also honored';
+      'Shorter animations, following the system setting';
 
   @override
   String get saveProfile => 'Save profile';
