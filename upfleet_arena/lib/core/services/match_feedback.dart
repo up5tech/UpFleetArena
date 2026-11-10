@@ -13,7 +13,8 @@ enum GameSound {
   miss('sounds/miss.wav'),
   sunk('sounds/sunk.wav'),
   win('sounds/win.wav'),
-  lose('sounds/lose.wav');
+  lose('sounds/lose.wav'),
+  warning('sounds/warning.wav');
 
   const GameSound(this.asset);
 
@@ -122,6 +123,14 @@ class MatchFeedback {
         _sound(GameSound.sunk);
         _haptic(HapticPulse.heavy);
     }
+  }
+
+  /// The turn is about to run out.
+  ///
+  /// Sound only: the clock is shared by the whole room, so buzzing every
+  /// device's motors would be noise rather than help.
+  void turnEnding() {
+    _sound(GameSound.warning);
   }
 
   /// The match ended; [won] tells whether the local player won.

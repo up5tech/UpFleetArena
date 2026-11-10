@@ -16,6 +16,7 @@ import '../../../shared/widgets/board_canvas.dart';
 import '../../rooms/domain/room_session_controller.dart';
 import '../widgets/battle_board.dart';
 import '../widgets/spectator_view.dart';
+import '../widgets/turn_warning.dart';
 
 /// From this width the match uses side-by-side columns instead of tabs.
 const double _wideLayoutWidth = 720;
@@ -39,11 +40,16 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
   CellCoord? _selectedCell;
   Timer? _ticker;
 
+  /// The turn that already played its warning, so it plays once per turn.
+  String? _warnedTurn;
+
   @override
   void initState() {
     super.initState();
     _ticker = Timer.periodic(const Duration(seconds: 1), (Timer _) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      _warnIfTurnEnding();
     });
   }
 
@@ -148,7 +154,11 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
         : living.firstOrNull?.playerId;
     final bool spectating = session.isSpectating;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _followPhase(session);
+      // A screen opened late may already be inside the last seconds.
+      _warnIfTurnEnding();
+    });
 
     final Widget ownFleet = _OwnFleetSection(
       snapshot: snapshot,
@@ -215,6 +225,20 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
               ),
       ),
     );
+  }
+
+  /// Plays the short warning once, when the current turn is nearly over.
+  void _warnIfTurnEnding() {
+    if (!mounted) return;
+    final RoomSessionState session = ref.read(roomSessionControllerProvider);
+    final MatchSnapshot? match = session.matchSnapshot;
+    if (match == null || match.winnerPlayerId != null) return;
+    if (!isUrgentTurn(session.turnCountdown?.remaining)) return;
+
+    final String turn = '${match.matchId}:${match.turnNumber}';
+    if (_warnedTurn == turn) return;
+    _warnedTurn = turn;
+    ref.read(matchFeedbackProvider).turnEnding();
   }
 
   /// Opens the result screen once the Host broadcast the final result.
@@ -620,8 +644,6 @@ class _PlayersSection extends StatelessWidget {
 
 /// One compact line of the player list.
 class _PlayerRow extends StatelessWidget {
-  /// From this many seconds left the clock starts warning the table.
-  static const int _urgentSeconds = 5;
 
   const _PlayerRow({
     required this.player,
@@ -642,7 +664,7 @@ class _PlayerRow extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextTheme text = Theme.of(context).textTheme;
     final Color status = player.alive ? AppTheme.accent : AppTheme.textSecondary;
-    final bool urgent = remaining != null && remaining! <= _urgentSeconds;
+    final bool urgent = isUrgentTurn(remaining);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 1),
@@ -765,14 +787,25 @@ class _TurnCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool urgent = isUrgentTurn(remaining);
+    final Color iconColor = urgent
+        ? AppTheme.danger
+        : isMyTurn
+        ? AppTheme.accent
+        : AppTheme.sunk;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: <Widget>[
             Icon(
-              isMyTurn ? Icons.gps_fixed : Icons.hourglass_empty,
-              color: isMyTurn ? AppTheme.accent : AppTheme.sunk,
+              urgent
+                  ? Icons.timer_outlined
+                  : isMyTurn
+                  ? Icons.gps_fixed
+                  : Icons.hourglass_empty,
+              color: iconColor,
               size: 22,
             ),
             const SizedBox(width: 10),
@@ -784,14 +817,19 @@ class _TurnCard extends StatelessWidget {
                     isMyTurn
                         ? l10n.yourTurn
                         : l10n.playerIsShooting(activePlayerName),
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: urgent ? AppTheme.danger : null,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     remaining == null
                         ? l10n.turnLabel(turnNumber)
                         : l10n.turnLabelWithTime(turnNumber, remaining!),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: urgent ? AppTheme.danger : null,
+                      fontWeight: urgent ? FontWeight.w600 : null,
+                    ),
                   ),
                 ],
               ),

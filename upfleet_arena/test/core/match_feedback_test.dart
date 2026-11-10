@@ -100,6 +100,19 @@ void main() {
     expect(pulses, isEmpty);
   });
 
+  test('the turn warning is a single short sound', () {
+    feedback.turnEnding();
+    expect(sounds.played, <GameSound>[GameSound.warning]);
+    expect(pulses, isEmpty);
+  });
+
+  test('sound off also silences the turn warning', () {
+    settings = settings.copyWith(soundEnabled: false);
+    feedback.turnEnding();
+    expect(sounds.played, isEmpty);
+    expect(pulses, isEmpty);
+  });
+
   test('winning and losing play distinct endings', () {
     feedback.matchFinished(won: true);
     feedback.matchFinished(won: false);

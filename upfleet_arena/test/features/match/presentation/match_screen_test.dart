@@ -131,6 +131,17 @@ RoomSessionState _session({
   turnCountdown: Countdown(remainingSeconds: turnSeconds),
 );
 
+/// A sound player that records what would play, without any audio backend.
+class _RecordingSoundPlayer implements SoundPlayer {
+  final List<GameSound> played = <GameSound>[];
+
+  @override
+  Future<void> play(GameSound sound) async => played.add(sound);
+
+  @override
+  Future<void> dispose() async {}
+}
+
 /// A sound player that records nothing and touches no audio backend, so the
 /// screen tests run without platform channels.
 class _NoopSoundPlayer implements SoundPlayer {
@@ -143,14 +154,14 @@ class _NoopSoundPlayer implements SoundPlayer {
 
 late SharedPreferences _testPreferences;
 
-Widget _app(_FakeSessionController controller) {
+Widget _app(_FakeSessionController controller, {SoundPlayer? sounds}) {
   return ProviderScope(
     overrides: [
       roomSessionControllerProvider.overrideWith(() => controller),
       localPreferencesProvider.overrideWithValue(
         LocalPreferences.withInstance(_testPreferences),
       ),
-      soundPlayerProvider.overrideWithValue(_NoopSoundPlayer()),
+      soundPlayerProvider.overrideWithValue(sounds ?? _NoopSoundPlayer()),
     ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -341,8 +352,60 @@ void main() {
 
     final Text clock = tester.widget<Text>(find.text('4s'));
     expect(clock.style?.color, AppTheme.danger);
-    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    // Both the turn card and the player row show the warning icon.
+    expect(find.byIcon(Icons.timer_outlined), findsNWidgets(2));
     expect(find.byIcon(Icons.hourglass_bottom), findsNothing);
+
+    // The turn card at the top warns with the same colour.
+    final Text turn = tester.widget<Text>(find.text('Turn 3 · 4s left'));
+    expect(turn.style?.color, AppTheme.danger);
+    expect(turn.style?.fontWeight, FontWeight.w600);
+  });
+
+  testWidgets('a turn with time left keeps the normal colours', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session())),
+    );
+
+    final Text turn = tester.widget<Text>(find.text('Turn 3 · 22s left'));
+    expect(turn.style?.color, isNot(AppTheme.danger));
+    expect(find.byIcon(Icons.gps_fixed), findsOneWidget);
+    expect(find.byIcon(Icons.timer_outlined), findsNothing);
+  });
+
+  testWidgets('the last seconds of a turn play one warning', (
+    WidgetTester tester,
+  ) async {
+    final _RecordingSoundPlayer sounds = _RecordingSoundPlayer();
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(session: _session(turnSeconds: 4)),
+        sounds: sounds,
+      ),
+    );
+    await tester.pump();
+
+    expect(sounds.played, <GameSound>[GameSound.warning]);
+
+    // The next ticks stay silent: the warning belongs to the turn.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(sounds.played, <GameSound>[GameSound.warning]);
+  });
+
+  testWidgets('a turn with time left plays no warning', (
+    WidgetTester tester,
+  ) async {
+    final _RecordingSoundPlayer sounds = _RecordingSoundPlayer();
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session()), sounds: sounds),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(sounds.played, isEmpty);
   });
 
   testWidgets('a narrow screen keeps the players in a tab', (
@@ -388,6 +451,24 @@ void main() {
     expect(find.text('Fire at this cell'), findsNothing);
     expect(find.text('Wait for your turn'), findsNothing);
     expect(controller.shots, isEmpty);
+  });
+
+  testWidgets('the spectator status card warns when the turn runs out', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(myTurn: false, eliminated: true, turnSeconds: 4),
+        ),
+      ),
+    );
+
+    final Text turn = tester.widget<Text>(find.text('Turn 3 · 4s left'));
+    expect(turn.style?.color, AppTheme.danger);
+    expect(turn.style?.fontWeight, FontWeight.w600);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.hourglass_empty), findsNothing);
   });
 
   testWidgets('the spectator roster lists only the living players', (

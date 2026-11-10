@@ -5,6 +5,7 @@ import '../../../app/theme/app_theme.dart';
 import '../../../game_engine/combat/combat.dart';
 import '../../../shared/models/match_models.dart';
 import '../../rooms/domain/room_session_controller.dart';
+import 'turn_warning.dart';
 
 /// The read-only view of a player whose fleet was sunk.
 ///
@@ -33,6 +34,7 @@ class SpectatorView extends StatelessWidget {
         .toList();
     final List<PublicActivity> feed = session.activityFeed.reversed.toList();
     final int? remaining = session.turnCountdown?.remaining;
+    final bool urgent = isUrgentTurn(remaining);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -77,7 +79,11 @@ class SpectatorView extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.hourglass_empty, color: AppTheme.miss, size: 22),
+                  Icon(
+                    urgent ? Icons.timer_outlined : Icons.hourglass_empty,
+                    color: urgent ? AppTheme.danger : AppTheme.miss,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -88,14 +94,19 @@ class SpectatorView extends StatelessWidget {
                             snapshot.playerById(snapshot.activePlayerId)?.displayName ??
                                 l10n.aPlayer,
                           ),
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: urgent ? AppTheme.danger : null,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           remaining == null
                               ? l10n.turnLabel(snapshot.turnNumber)
                               : l10n.turnLabelWithTime(snapshot.turnNumber, remaining),
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: urgent ? AppTheme.danger : null,
+                            fontWeight: urgent ? FontWeight.w600 : null,
+                          ),
                         ),
                       ],
                     ),
