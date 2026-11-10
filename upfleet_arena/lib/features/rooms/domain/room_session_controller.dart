@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../core/services/screen_awake_service.dart';
+import '../../../game_engine/bot/bot_brain.dart';
 import '../../../game_engine/placement/placement.dart';
 import '../../../host_runtime/host_room_service.dart';
 import '../../../host_runtime/room_coordinator.dart';
@@ -76,6 +77,7 @@ class RoomSessionState {
     this.lastActivity,
     this.matchResult,
     this.activityFeed = const <PublicActivity>[],
+    this.practiceMode = false,
   });
 
   /// Whether this device hosts, joined, or is outside a room.
@@ -149,6 +151,12 @@ class RoomSessionState {
   /// They carry no coordinate, so a spectator may read them (PLAN.md §5.2).
   final List<PublicActivity> activityFeed;
 
+  /// Whether this room is a solo match against a computer opponent.
+  ///
+  /// A practice room lives on this device only: it has no TCP listener, no
+  /// advertisement and no invitation code.
+  final bool practiceMode;
+
   /// Whether this device hosts the room.
   bool get isHost => role == RoomRole.host;
 
@@ -195,6 +203,7 @@ class RoomSessionState {
     Object? lastActivity = _unset,
     Object? matchResult = _unset,
     List<PublicActivity>? activityFeed,
+    bool? practiceMode,
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
@@ -233,6 +242,7 @@ class RoomSessionState {
         ? this.matchResult
         : matchResult as MatchResult?,
     activityFeed: activityFeed ?? this.activityFeed,
+    practiceMode: practiceMode ?? this.practiceMode,
   );
 
   static const Object _unset = Object();
@@ -244,6 +254,7 @@ class RoomSessionState {
 /// [HostRoomService], as a client it owns a [RoomClientSession].
 class RoomSessionController extends Notifier<RoomSessionState> {
   HostRoomService? _hostService;
+  RoomCoordinator? _practiceCoordinator;
   ScreenAwakeService? _screenAwake;
   RoomClientSession? _clientSession;
   StreamSubscription<RoomSnapshot>? _hostSubscription;
@@ -287,11 +298,18 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   }
 
   Future<void> _applyDeadlineOnResume() async {
-    final HostRoomService? service = _hostService;
-    if (service == null) return;
-    await service.coordinator.checkPreparationDeadline();
-    await service.coordinator.checkTurnDeadline();
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator == null) return;
+    await coordinator.checkPreparationDeadline();
+    await coordinator.checkTurnDeadline();
   }
+
+  /// The authority that runs the room on this device.
+  ///
+  /// A hosted room is served by [HostRoomService] over TCP; a practice room
+  /// runs the very same [RoomCoordinator] in-process without any transport.
+  RoomCoordinator? get _coordinator =>
+      _hostService?.coordinator ?? _practiceCoordinator;
 
   // ----------------------------------------------------------------- host
 
@@ -331,56 +349,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       final int port = await service.start(
         label: '${profile.displayName}’s room',
       );
-      _hostSubscription = service.coordinator.hostSnapshots.listen(
-        (RoomSnapshot snapshot) {
-          state = state.copyWith(snapshot: snapshot);
-        },
-      );
-
-      _hostPlacementSubscription = service.coordinator.hostPlacementStates
-          .listen((PlacementState placement) {
-            state = state.copyWith(placement: placement);
-          });
-
-      _hostReadinessSubscription = service.coordinator.hostReadinessStates
-          .listen((ReadinessState readiness) {
-            state = state.copyWith(readiness: readiness);
-          });
-
-      _hostCountdownSubscription = service.coordinator.hostCountdowns.listen(
-        (int remaining) {
-          state = state.copyWith(
-            countdown: Countdown(
-              remainingSeconds: remaining,
-                          ),
-          );
-        },
-      );
-
-      _hostMatchSubscription = service.coordinator.hostMatchStarts.listen(
-        (MatchStartState match) {
-          state = state.copyWith(match: match, countdown: null);
-        },
-      );
-
-      _hostNoticeSubscription = service.coordinator.hostNotices.listen(
-        (String notice) {
-          state = state.copyWith(notice: notice);
-        },
-      );
-
-      _hostMatchSnapshotSubscription = service.coordinator.hostMatchSnapshots
-          .listen(_acceptMatchSnapshot);
-      _hostMatchResultSubscription = service.coordinator.hostMatchResults
-          .listen(_acceptMatchResult);
-      _hostTurnCountdownSubscription = service.coordinator.hostTurnCountdowns
-          .listen(_acceptTurnCountdown);
-      _hostShotSubscription = service.coordinator.hostShotFeedbacks.listen(
-        (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
-      );
-      _hostActivitySubscription = service.coordinator.hostPublicActivities.listen(
-        _acceptPublicActivity,
-      );
+      _bindHostCoordinator(service.coordinator);
 
       service.coordinator.createRoom(
         hostDisplayName: profile.displayName,
@@ -413,15 +382,139 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
   }
 
+  /// Starts a solo match against a computer opponent on this device.
+  ///
+  /// Nothing is advertised and no socket is opened: the room authority runs
+  /// in-process and plays the turns of the bot itself. The preparation starts
+  /// right away, so the player only has to place their own fleet.
+  Future<void> startPractice({
+    required Profile profile,
+    required BotDifficulty difficulty,
+    required String botName,
+    RoomConfig? config,
+  }) async {
+    await _teardown();
+
+    state = const RoomSessionState().copyWith(
+      role: RoomRole.host,
+      status: RoomSessionStatus.working,
+    );
+
+    final RoomConfig effectiveConfig = config ?? RoomConfig.defaults;
+    final List<String> problems = effectiveConfig.validate();
+    if (problems.isNotEmpty) {
+      state = state.copyWith(
+        status: RoomSessionStatus.failed,
+        errorCode: 'INVALID_ROOM_CONFIG',
+        errorMessage: problems.join(' '),
+      );
+      return;
+    }
+
+    final RoomCoordinator coordinator = RoomCoordinator();
+    _practiceCoordinator = coordinator;
+    _bindHostCoordinator(coordinator);
+    coordinator.createRoom(
+      hostDisplayName: profile.displayName,
+      avatarId: profile.avatarId,
+      deviceId: ref.read(localPreferencesProvider).deviceId,
+      config: effectiveConfig,
+      tcpPort: 0,
+    );
+
+    final List<String> setupProblems = <String>[
+      ...await coordinator.hostAddBot(
+        displayName: botName,
+        difficulty: difficulty,
+      ),
+      ...await coordinator.hostStartPlacement(),
+    ];
+    if (setupProblems.isNotEmpty) {
+      state = state.copyWith(
+        status: RoomSessionStatus.failed,
+        errorCode: 'PRACTICE_SETUP_FAILED',
+        errorMessage: setupProblems.join(' '),
+      );
+      await _teardown();
+      return;
+    }
+
+    state = state.copyWith(
+      status: RoomSessionStatus.inRoom,
+      roomId: coordinator.state?.roomId,
+      playerId: coordinator.state?.hostPlayerId,
+      inviteCode: null,
+      practiceMode: true,
+    );
+  }
+
+  /// Subscribes this controller to the authority that runs the room.
+  ///
+  /// A hosted room is served over TCP and a practice room runs the same
+  /// authority in-process, so both publish the same streams and the UI never
+  /// needs to know which one drives it.
+  void _bindHostCoordinator(RoomCoordinator coordinator) {
+    _hostSubscription = coordinator.hostSnapshots.listen(
+      (RoomSnapshot snapshot) {
+        state = state.copyWith(snapshot: snapshot);
+      },
+    );
+
+    _hostPlacementSubscription = coordinator.hostPlacementStates
+        .listen((PlacementState placement) {
+          state = state.copyWith(placement: placement);
+        });
+
+    _hostReadinessSubscription = coordinator.hostReadinessStates
+        .listen((ReadinessState readiness) {
+          state = state.copyWith(readiness: readiness);
+        });
+
+    _hostCountdownSubscription = coordinator.hostCountdowns.listen(
+      (int remaining) {
+        state = state.copyWith(
+          countdown: Countdown(
+            remainingSeconds: remaining,
+                        ),
+        );
+      },
+    );
+
+    _hostMatchSubscription = coordinator.hostMatchStarts.listen(
+      (MatchStartState match) {
+        state = state.copyWith(match: match, countdown: null);
+      },
+    );
+
+    _hostNoticeSubscription = coordinator.hostNotices.listen(
+      (String notice) {
+        state = state.copyWith(notice: notice);
+      },
+    );
+
+    _hostMatchSnapshotSubscription = coordinator.hostMatchSnapshots
+        .listen(_acceptMatchSnapshot);
+    _hostMatchResultSubscription = coordinator.hostMatchResults
+        .listen(_acceptMatchResult);
+    _hostTurnCountdownSubscription = coordinator.hostTurnCountdowns
+        .listen(_acceptTurnCountdown);
+    _hostShotSubscription = coordinator.hostShotFeedbacks.listen(
+      (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
+    );
+    _hostActivitySubscription = coordinator.hostPublicActivities.listen(
+      _acceptPublicActivity,
+    );
+  }
+
   /// Applies new room settings. Host only.
   ///
   /// The Host runtime validates the values and broadcasts the accepted ones
   /// to every client. Returns the validation problems, or an empty list on
   /// success.
   Future<List<String>> updateConfig(RoomConfig config) async {
-    final HostRoomService? service = _hostService;
-    if (service == null) return const <String>[];
-    return service.coordinator.hostUpdateConfig(config);
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator == null) return const <String>[];
+    return coordinator.hostUpdateConfig(config);
   }
 
   /// Sends a fleet layout to the Host.
@@ -430,9 +523,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   /// the UI always shows the Host truth. Returns the validation problems of
   /// the local Host runtime, or an empty list when the command was sent.
   Future<List<String>> setPlacement(List<ShipPlacement> ships) async {
-    final HostRoomService? service = _hostService;
-    if (service != null) {
-      return service.coordinator.hostSetPlacement(ships);
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator != null) {
+      return coordinator.hostSetPlacement(ships);
     }
     _clientSession?.setPlacement(ships);
     return const <String>[];
@@ -440,9 +533,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
   /// Asks the Host to place the fleet automatically.
   Future<void> autoPlace() async {
-    final HostRoomService? service = _hostService;
-    if (service != null) {
-      await service.coordinator.hostAutoPlace();
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator != null) {
+      await coordinator.hostAutoPlace();
       return;
     }
     _clientSession?.autoPlace();
@@ -453,9 +546,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   /// Returns the validation problems of the local Host runtime, or an empty
   /// list when the command was sent.
   Future<List<String>> setPlacementReady() async {
-    final HostRoomService? service = _hostService;
-    if (service != null) {
-      return service.coordinator.hostSetReady();
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator != null) {
+      return coordinator.hostSetReady();
     }
     _clientSession?.setReady();
     return const <String>[];
@@ -465,9 +558,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   ///
   /// Returns the validation problems, or an empty list on success.
   Future<List<String>> startPlacement() async {
-    final HostRoomService? service = _hostService;
-    if (service != null) {
-      return service.coordinator.hostStartPlacement();
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator != null) {
+      return coordinator.hostStartPlacement();
     }
     _clientSession?.startPlacement();
     return const <String>[];
@@ -490,10 +583,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _submittedTurn = turn;
     state = state.copyWith(firePending: true, combatError: null);
     try {
-      final HostRoomService? service = _hostService;
+      final RoomCoordinator? coordinator = _coordinator;
       final List<String> problems;
-      if (service != null) {
-        problems = await service.coordinator.hostFire(
+      if (coordinator != null) {
+        problems = await coordinator.hostFire(
           matchId: snapshot.matchId,
           turnNumber: snapshot.turnNumber,
           expectedStateVersion: snapshot.stateVersion,
@@ -579,16 +672,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
   /// Removes a player from the room. Host only.
   Future<void> kick(String playerId) async {
-    final HostRoomService? service = _hostService;
-    if (service == null) return;
-    await service.coordinator.hostKick(playerId);
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator == null) return;
+    await coordinator.hostKick(playerId);
   }
 
   /// Closes the room for everyone. Host only.
   Future<void> closeRoom() async {
-    final HostRoomService? service = _hostService;
-    if (service == null) return;
-    await service.coordinator.closeRoom(
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator == null) return;
+    await coordinator.closeRoom(
       reason: 'host_closed',
       message: 'The host closed the room.',
     );
@@ -856,6 +949,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
     await service?.stop();
     await service?.coordinator.dispose();
+
+    final RoomCoordinator? practiceCoordinator = _practiceCoordinator;
+    _practiceCoordinator = null;
+    await practiceCoordinator?.dispose();
 
     final RoomClientSession? session = _clientSession;
     _clientSession = null;

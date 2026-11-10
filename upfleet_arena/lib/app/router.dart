@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/home/presentation/home_screen.dart';
+import '../features/bot/presentation/bot_setup_screen.dart';
 import '../features/lan_lab/presentation/lan_lab_screen.dart';
 import '../features/lobby/presentation/host_settings_screen.dart';
 import '../features/lobby/presentation/lobby_screen.dart';
@@ -35,6 +36,12 @@ class AppRouter {
         name: 'profile',
         builder: (BuildContext context, GoRouterState state) =>
             const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/play-bot',
+        name: 'play-bot',
+        builder: (BuildContext context, GoRouterState state) =>
+            const BotSetupScreen(),
       ),
       GoRoute(
         path: '/create-room',

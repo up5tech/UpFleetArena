@@ -66,6 +66,13 @@ class HomeScreen extends ConsumerWidget {
                 _HeroCard(),
                 const SizedBox(height: 16),
                 _PhaseEntry(
+                  icon: Icons.smart_toy_outlined,
+                  title: l10n.playVsComputer,
+                  subtitle: l10n.playVsComputerSubtitle,
+                  onTap: () => context.go('/play-bot'),
+                ),
+                const SizedBox(height: 8),
+                _PhaseEntry(
                   icon: Icons.add_home_work_outlined,
                   title: l10n.createRoom,
                   subtitle: l10n.createRoomSubtitle,

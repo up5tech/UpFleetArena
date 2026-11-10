@@ -86,6 +86,25 @@
   "createRoomSubtitle": "Host a room and share the invitation code",
   "joinRoom": "Join Room",
   "joinRoomSubtitle": "Find a nearby room and join with the code",
+
+  "playVsComputer": "Play vs computer",
+  "playVsComputerSubtitle": "Solo match against the computer, no Wi-Fi needed",
+  "chooseDifficulty": "Choose the difficulty",
+  "difficultyEasy": "Easy",
+  "difficultyMedium": "Medium",
+  "difficultyHard": "Hard",
+  "difficultyEasyHint": "Fires at random cells and never follows up a hit.",
+  "difficultyMediumHint": "Keeps firing around a hit until the ship is sunk.",
+  "difficultyHardHint": "Hunts on a checkerboard and finishes damaged ships \u2014 a real challenge.",
+  "botDisplayName": "Computer ({difficulty})",
+  "@botDisplayName": {
+    "placeholders": {
+      "difficulty": { "type": "String" }
+    }
+  },
+  "startPractice": "Start playing",
+  "startingPractice": "Preparing\u2026",
+  "practiceHint": "The computer plays on this device. Place your fleet, then take turns firing at each other.",
   "lobbySubtitle": "Seats, readiness and starting the match",
   "shipPlacement": "Ship Placement",
   "shipPlacementSubtitle": "Arrange your private fleet before the match",

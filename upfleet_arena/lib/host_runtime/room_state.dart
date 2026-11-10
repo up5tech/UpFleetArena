@@ -1,4 +1,5 @@
 import '../game_engine/board/board.dart';
+import '../game_engine/bot/bot_brain.dart';
 import '../game_engine/combat/combat.dart';
 import '../game_engine/combat/match_result.dart';
 import '../game_engine/placement/placement.dart';
@@ -17,6 +18,8 @@ class HostPlayer {
     required this.deviceId,
     required this.joinedAt,
     this.resumeTokenHash,
+    this.isBot = false,
+    this.botDifficulty,
     this.status = PlayerConnectionStatus.connected,
     this.disconnectedAt,
     this.disconnectDeadline,
@@ -37,6 +40,15 @@ class HostPlayer {
 
   /// The device identifier this member joined from.
   final String deviceId;
+
+  /// Whether this seat is driven by a computer opponent.
+  ///
+  /// A bot has no socket: the Host runtime plays its turns itself
+  /// (see `BotBrain`).
+  final bool isBot;
+
+  /// The strength of the computer opponent, if this seat is a bot.
+  final BotDifficulty? botDifficulty;
 
   /// When the member joined.
   final DateTime joinedAt;
@@ -77,6 +89,7 @@ class HostPlayer {
     avatarId: avatarId,
     role: role,
     status: status,
+    isBot: isBot,
   );
 }
 

@@ -166,6 +166,51 @@ class AppLocalizationsVi extends AppLocalizations {
   String get joinRoomSubtitle => 'Tìm phòng lân cận và vào bằng mã';
 
   @override
+  String get playVsComputer => 'Chơi với máy';
+
+  @override
+  String get playVsComputerSubtitle => 'Đấu một mình với máy, không cần Wi-Fi';
+
+  @override
+  String get chooseDifficulty => 'Chọn độ khó';
+
+  @override
+  String get difficultyEasy => 'Dễ';
+
+  @override
+  String get difficultyMedium => 'Trung bình';
+
+  @override
+  String get difficultyHard => 'Khó';
+
+  @override
+  String get difficultyEasyHint =>
+      'Bắn ngẫu nhiên và không dò theo phát trúng.';
+
+  @override
+  String get difficultyMediumHint =>
+      'Bắn tiếp quanh phát trúng cho đến khi chìm tàu.';
+
+  @override
+  String get difficultyHardHint =>
+      'Dò theo ô so le và kết liễu tàu bị thương — đối thủ khó.';
+
+  @override
+  String botDisplayName(String difficulty) {
+    return 'Máy ($difficulty)';
+  }
+
+  @override
+  String get startPractice => 'Bắt đầu chơi';
+
+  @override
+  String get startingPractice => 'Đang chuẩn bị…';
+
+  @override
+  String get practiceHint =>
+      'Máy chơi ngay trên thiết bị này. Xếp hạm đội rồi lần lượt bắn vào nhau.';
+
+  @override
   String get lobbySubtitle => 'Người chơi, trạng thái sẵn sàng và bắt đầu trận';
 
   @override

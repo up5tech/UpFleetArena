@@ -73,6 +73,19 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     }
   }
 
+  /// Leaves the preparation.
+  ///
+  /// A practice room has no lobby behind it, so leaving really ends it
+  /// instead of letting a match run on in the background.
+  Future<void> _leave(BuildContext context, RoomSessionState session) async {
+    if (!session.practiceMode) {
+      context.pop();
+      return;
+    }
+    await ref.read(roomSessionControllerProvider.notifier).closeRoom();
+    if (context.mounted) context.go('/');
+  }
+
   FleetProfile get _profile => FleetProfile.fromPreset(
     _session.snapshot?.config.fleetPreset ?? FleetPreset.standard,
   );
@@ -153,7 +166,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
         title: Text(l10n.prepareYourFleet),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () => _leave(context, session),
         ),
       ),
       body: SafeArea(

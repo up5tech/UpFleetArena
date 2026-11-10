@@ -294,6 +294,7 @@ class PlayerSummary {
     required this.role,
     required this.status,
     this.ready = false,
+    this.isBot = false,
   });
 
   /// Host-assigned identifier of the player.
@@ -314,6 +315,9 @@ class PlayerSummary {
   /// Whether the player has completed their fleet. Used from Phase 4 on.
   final bool ready;
 
+  /// Whether this member is a computer opponent.
+  final bool isBot;
+
   /// Whether this member is the Host.
   bool get isHost => role == PlayerRole.host;
 
@@ -325,6 +329,7 @@ class PlayerSummary {
     PlayerRole? role,
     PlayerConnectionStatus? status,
     bool? ready,
+    bool? isBot,
   }) => PlayerSummary(
     playerId: playerId ?? this.playerId,
     displayName: displayName ?? this.displayName,
@@ -332,6 +337,7 @@ class PlayerSummary {
     role: role ?? this.role,
     status: status ?? this.status,
     ready: ready ?? this.ready,
+    isBot: isBot ?? this.isBot,
   );
 
   /// Serializes the summary.
@@ -342,6 +348,7 @@ class PlayerSummary {
     'role': role.wire,
     'status': status.wire,
     'ready': ready,
+    'isBot': isBot,
   };
 
   /// Parses a summary received from the Host.
@@ -352,6 +359,7 @@ class PlayerSummary {
     role: PlayerRole.fromWire(json['role'] as String?),
     status: PlayerConnectionStatus.fromWire(json['status'] as String?),
     ready: json['ready'] as bool? ?? false,
+    isBot: json['isBot'] as bool? ?? false,
   );
 }
 

@@ -166,6 +166,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get joinRoomSubtitle => 'Find a nearby room and join with the code';
 
   @override
+  String get playVsComputer => 'Play vs computer';
+
+  @override
+  String get playVsComputerSubtitle =>
+      'Solo match against the computer, no Wi-Fi needed';
+
+  @override
+  String get chooseDifficulty => 'Choose the difficulty';
+
+  @override
+  String get difficultyEasy => 'Easy';
+
+  @override
+  String get difficultyMedium => 'Medium';
+
+  @override
+  String get difficultyHard => 'Hard';
+
+  @override
+  String get difficultyEasyHint =>
+      'Fires at random cells and never follows up a hit.';
+
+  @override
+  String get difficultyMediumHint =>
+      'Keeps firing around a hit until the ship is sunk.';
+
+  @override
+  String get difficultyHardHint =>
+      'Hunts on a checkerboard and finishes damaged ships — a real challenge.';
+
+  @override
+  String botDisplayName(String difficulty) {
+    return 'Computer ($difficulty)';
+  }
+
+  @override
+  String get startPractice => 'Start playing';
+
+  @override
+  String get startingPractice => 'Preparing…';
+
+  @override
+  String get practiceHint =>
+      'The computer plays on this device. Place your fleet, then take turns firing at each other.';
+
+  @override
   String get lobbySubtitle => 'Seats, readiness and starting the match';
 
   @override

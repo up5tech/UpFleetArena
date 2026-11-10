@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../core/config/app_config.dart';
 import '../core/utils/secure_random.dart';
 import '../game_engine/board/board.dart';
+import '../game_engine/bot/bot_brain.dart';
 import '../game_engine/combat/combat.dart';
 import '../game_engine/combat/match_result.dart';
 import '../game_engine/fleet/fleet_profile.dart';
@@ -48,7 +49,10 @@ class RoomCoordinator {
     ClientConnectionRegistry? registry,
     this.projections = const ProjectionBuilder(),
     DateTime Function()? clock,
+    this.botThinkingTime = const Duration(milliseconds: 900),
+    Random? botRandom,
   }) : registry = registry ?? ClientConnectionRegistry(),
+       botRandom = botRandom ?? Random(),
        _clock = clock ?? _monotonicClock();
 
   static DateTime Function() _monotonicClock() {
@@ -83,6 +87,14 @@ class RoomCoordinator {
 
   /// Builds the per-recipient views of the room.
   final ProjectionBuilder projections;
+
+  /// How long a computer opponent thinks before it fires.
+  ///
+  /// Tests shorten it so a whole match can be played without real waiting.
+  final Duration botThinkingTime;
+
+  /// The randomness a computer opponent uses.
+  final Random botRandom;
   final StreamController<RoomSnapshot> _hostSnapshots =
       StreamController<RoomSnapshot>.broadcast();
   final StreamController<PlacementState> _hostPlacementStates =
@@ -111,6 +123,8 @@ class RoomCoordinator {
   Stream<PublicActivity> get hostPublicActivities => _hostPublicActivities.stream;
 
   Timer? _phaseTimer;
+
+  Timer? _botTimer;
 
   HostRoomState? _state;
   RoomTransport? _transport;
@@ -226,6 +240,53 @@ class RoomCoordinator {
 
     _state = room;
     _emitHostSnapshot();
+  }
+
+  /// Seats a computer opponent in the room.
+  ///
+  /// Only the Host device can do this and only before the preparation starts.
+  /// A bot has no socket: it occupies a normal seat and the Host runtime plays
+  /// its turns with the same validation as a remote client (see [BotBrain]).
+  ///
+  /// Returns the validation problems, or an empty list on success.
+  Future<List<String>> hostAddBot({
+    required String displayName,
+    required BotDifficulty difficulty,
+  }) => _serialize(() => _hostAddBot(displayName, difficulty));
+
+  Future<List<String>> _hostAddBot(
+    String displayName,
+    BotDifficulty difficulty,
+  ) async {
+    final HostRoomState? room = _state;
+    if (room == null) return <String>['The room is not open.'];
+    if (room.status != RoomStatus.lobby) {
+      return <String>['The computer can only join before the preparation starts.'];
+    }
+    final String? nameProblem = DisplayNames.validate(displayName);
+    if (nameProblem != null) return <String>[nameProblem];
+    if (room.seatedCount >= room.config.maxPlayers) {
+      return <String>['The room is full.'];
+    }
+
+    final DateTime now = DateTime.now();
+    final String playerId = SecureRandom.uuidV4();
+    room.players[playerId] = HostPlayer(
+      playerId: playerId,
+      displayName: DisplayNames.normalize(displayName),
+      avatarId: '🤖',
+      role: PlayerRole.player,
+      deviceId: '',
+      joinedAt: now,
+      isBot: true,
+      botDifficulty: difficulty,
+    );
+    room.stateVersion++;
+
+    await _broadcastRoomState(room);
+    await _broadcastReadiness(room);
+    _emitHostSnapshot();
+    return const <String>[];
   }
 
   /// Routes one inbound frame to the matching rule.
@@ -619,6 +680,7 @@ class RoomCoordinator {
     if (room == null || room.status == RoomStatus.closed) return;
 
     _stopPlacementTimer();
+    _stopBotTimer();
     room.status = RoomStatus.closed;
     room.placementDeadline = null;
     room.match?.turnDeadline = null;
@@ -1134,6 +1196,7 @@ class RoomCoordinator {
         if (player.status != PlayerConnectionStatus.connected) return false;
         final ClientSession? session = registry.byPlayerId(player.playerId);
         return player.isHost ||
+            player.isBot ||
             (session != null && _isLiveMember(room, session));
       }).toList();
 
@@ -1261,12 +1324,86 @@ class RoomCoordinator {
 
   Future<void> _emitTurnResolution(HostRoomState room) async {
     if (room.status == RoomStatus.finished) {
+      _stopBotTimer();
       await _finishMatch(room, room.match!.winnerPlayerId);
-    } else {
-      _emitHostTurnCountdown(turnRemainingSeconds!);
-      await _broadcastTurnStarted(room);
-      await _broadcastMatchSnapshot(room);
+      return;
     }
+    _emitHostTurnCountdown(turnRemainingSeconds!);
+    await _broadcastTurnStarted(room);
+    await _broadcastMatchSnapshot(room);
+    _scheduleBotTurn(room);
+  }
+
+  // ------------------------------------------------------- computer opponent
+
+  /// Lets a computer opponent take its turn when it owns the current one.
+  void _scheduleBotTurn(HostRoomState room) {
+    _stopBotTimer();
+    final HostMatchState? match = room.match;
+    if (match == null || room.status != RoomStatus.active) return;
+    final HostPlayer? active = room.players[match.activePlayerId];
+    if (active == null || !active.isBot || !match.isAlive(active.playerId)) {
+      return;
+    }
+    _botTimer = Timer(botThinkingTime, () => unawaited(_playBotTurn()));
+  }
+
+  void _stopBotTimer() {
+    _botTimer?.cancel();
+    _botTimer = null;
+  }
+
+  Future<void> _playBotTurn() => _serialize(_performBotTurn);
+
+  /// Plays one turn of a computer opponent.
+  ///
+  /// The bot goes through `_fireAs`, so the same validation rejects a repeated
+  /// cell, a dead target or an expired turn as it does for a remote client
+  /// (GAME_RULES.md §6).
+  Future<void> _performBotTurn() async {
+    final HostRoomState? room = _state;
+    final HostMatchState? match = room?.match;
+    if (room == null || match == null || room.status != RoomStatus.active) {
+      return;
+    }
+
+    final String botId = match.activePlayerId;
+    final HostPlayer? bot = room.players[botId];
+    if (bot == null || !bot.isBot || !match.isAlive(botId)) return;
+
+    final DateTime? deadline = match.turnDeadline;
+    if (deadline == null || !_now().isBefore(deadline)) return;
+
+    final List<BotTargetKnowledge> targets = match.turnOrder
+        .where((String playerId) => playerId != botId && match.isAlive(playerId))
+        .map(
+          (String playerId) => BotTargetKnowledge(
+            playerId: playerId,
+            shots:
+                match.attackHistory[botId]?[playerId] ??
+                const <CellCoord, ShotResult>{},
+            shipsRemaining: _shipsAfloat(match, playerId),
+          ),
+        )
+        .toList();
+
+    final BotShot? shot = BotBrain(
+      difficulty: bot.botDifficulty ?? BotDifficulty.medium,
+      random: botRandom,
+    ).chooseShot(board: _board(room), targets: targets);
+    if (shot == null) return;
+
+    await _fireAs(
+      room,
+      match,
+      botId,
+      shot.targetPlayerId,
+      shot.cell.row,
+      shot.cell.column,
+      matchId: match.matchId,
+      turnNumber: match.turnNumber,
+      expectedStateVersion: room.stateVersion,
+    );
   }
 
   Future<List<String>> hostFire({
@@ -2170,7 +2307,36 @@ class RoomCoordinator {
     await _broadcastPlacementStarted(room);
     _emitHostCountdown(room.config.placementDurationSeconds);
     _emitHostSnapshot();
+    // A computer opponent has nobody to place its ships for it, so the Host
+    // places them and confirms them right away
+    // (GAME_RULES.md §5 "Auto Place").
+    await _placeBotFleets(room);
     if (_everyoneReady(room)) await _startMatch(room);
+  }
+
+  /// Places and confirms the fleet of every computer opponent.
+  Future<void> _placeBotFleets(HostRoomState room) async {
+    for (final HostPlayer player in _eligiblePlayers(room)) {
+      if (!player.isBot) continue;
+      final HostPlayerPlacement placement = placementFor(player.playerId);
+      if (placement.ready && _hasLegalFleet(room, player.playerId)) continue;
+
+      final List<ShipPlacement> ships = autoPlaceFleet(
+        board: _board(room),
+        profile: _profile(room),
+        random: Random(),
+      );
+      placement.ships
+        ..clear()
+        ..addEntries(
+          ships.map(
+            (ShipPlacement ship) =>
+                MapEntry<String, ShipPlacement>(ship.shipId, ship),
+          ),
+        );
+      placement.ready = true;
+    }
+    await _broadcastReadiness(room);
   }
 
   /// The Host-owned deadline check.
@@ -2302,6 +2468,7 @@ class RoomCoordinator {
     _emitHostMatchStart(state);
     await _broadcastMatchSnapshot(room);
     _emitHostSnapshot();
+    _scheduleBotTurn(room);
   }
 
   /// Cancels the preparation and returns the room to the lobby.
@@ -2423,6 +2590,7 @@ class RoomCoordinator {
 
   Future<void> _dispose() async {
     _stopPlacementTimer();
+    _stopBotTimer();
     await _hostSnapshots.close();
     await _hostPlacementStates.close();
     await _hostReadinessStates.close();

@@ -380,6 +380,84 @@ abstract class AppLocalizations {
   /// **'Find a nearby room and join with the code'**
   String get joinRoomSubtitle;
 
+  /// No description provided for @playVsComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Play vs computer'**
+  String get playVsComputer;
+
+  /// No description provided for @playVsComputerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Solo match against the computer, no Wi-Fi needed'**
+  String get playVsComputerSubtitle;
+
+  /// No description provided for @chooseDifficulty.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the difficulty'**
+  String get chooseDifficulty;
+
+  /// No description provided for @difficultyEasy.
+  ///
+  /// In en, this message translates to:
+  /// **'Easy'**
+  String get difficultyEasy;
+
+  /// No description provided for @difficultyMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get difficultyMedium;
+
+  /// No description provided for @difficultyHard.
+  ///
+  /// In en, this message translates to:
+  /// **'Hard'**
+  String get difficultyHard;
+
+  /// No description provided for @difficultyEasyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Fires at random cells and never follows up a hit.'**
+  String get difficultyEasyHint;
+
+  /// No description provided for @difficultyMediumHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps firing around a hit until the ship is sunk.'**
+  String get difficultyMediumHint;
+
+  /// No description provided for @difficultyHardHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hunts on a checkerboard and finishes damaged ships — a real challenge.'**
+  String get difficultyHardHint;
+
+  /// No description provided for @botDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer ({difficulty})'**
+  String botDisplayName(String difficulty);
+
+  /// No description provided for @startPractice.
+  ///
+  /// In en, this message translates to:
+  /// **'Start playing'**
+  String get startPractice;
+
+  /// No description provided for @startingPractice.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get startingPractice;
+
+  /// No description provided for @practiceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The computer plays on this device. Place your fleet, then take turns firing at each other.'**
+  String get practiceHint;
+
   /// No description provided for @lobbySubtitle.
   ///
   /// In en, this message translates to:
