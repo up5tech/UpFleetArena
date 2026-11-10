@@ -30,7 +30,10 @@ void main() {
     expect(find.text('UpFleet Arena'), findsOneWidget);
     expect(find.text('Create Room'), findsOneWidget);
     expect(find.text('Join Room'), findsOneWidget);
-    expect(find.text('Profile & Settings'), findsOneWidget);
+
+    final Finder profile = find.widgetWithText(ListTile, 'Profile & Settings');
+    await _scrollTo(tester, profile);
+    expect(profile, findsOneWidget);
   });
 
   testWidgets('Every implemented screen has an enabled entry', (

@@ -166,14 +166,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get joinRoomSubtitle => 'Find a nearby room and join with the code';
 
   @override
-  String get lobbySubtitle => 'Reached from Create Room or Join Room';
+  String get lobbySubtitle => 'Seats, readiness and starting the match';
 
   @override
   String get shipPlacement => 'Ship Placement';
 
   @override
   String get shipPlacementSubtitle =>
-      'Reached from the lobby — private board and fleet';
+      'Arrange your private fleet before the match';
 
   @override
   String get battleSubtitle => 'Turn-based combat on the target board';

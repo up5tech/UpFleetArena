@@ -166,13 +166,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get joinRoomSubtitle => 'Tìm phòng lân cận và vào bằng mã';
 
   @override
-  String get lobbySubtitle => 'Vào từ Tạo phòng hoặc Vào phòng';
+  String get lobbySubtitle => 'Người chơi, trạng thái sẵn sàng và bắt đầu trận';
 
   @override
   String get shipPlacement => 'Xếp tàu';
 
   @override
-  String get shipPlacementSubtitle => 'Vào từ sảnh — bàn chơi và hạm đội riêng';
+  String get shipPlacementSubtitle =>
+      'Sắp xếp hạm đội riêng trước khi trận bắt đầu';
 
   @override
   String get battleSubtitle => 'Chiến đấu theo lượt trên bàn mục tiêu';

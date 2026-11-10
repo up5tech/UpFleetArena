@@ -383,7 +383,7 @@ abstract class AppLocalizations {
   /// No description provided for @lobbySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Reached from Create Room or Join Room'**
+  /// **'Seats, readiness and starting the match'**
   String get lobbySubtitle;
 
   /// No description provided for @shipPlacement.
@@ -395,7 +395,7 @@ abstract class AppLocalizations {
   /// No description provided for @shipPlacementSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Reached from the lobby — private board and fleet'**
+  /// **'Arrange your private fleet before the match'**
   String get shipPlacementSubtitle;
 
   /// No description provided for @battleSubtitle.

@@ -27,6 +27,11 @@ void main() {
 
     expect(find.text('Tạo phòng'), findsOneWidget);
     expect(find.text('Vào phòng'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Hồ sơ & Cài đặt'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Hồ sơ & Cài đặt'), findsOneWidget);
     // English-only labels must not leak into the Vietnamese UI.
     expect(find.text('Create Room'), findsNothing);
@@ -49,6 +54,11 @@ void main() {
 
     expect(find.text('Create Room'), findsOneWidget);
     expect(find.text('Join Room'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Profile & Settings'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Profile & Settings'), findsOneWidget);
   });
 
