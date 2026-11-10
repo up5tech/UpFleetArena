@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:upfleet_arena/l10n/fleet_preset_label.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
@@ -101,8 +102,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                           canKick:
                               session.isHost &&
                               !player.isHost &&
-                              player.status ==
-                                  PlayerConnectionStatus.connected,
+                              player.status == PlayerConnectionStatus.connected,
                           onKick: () => _kick(context, player),
                         ),
                   ],
@@ -148,10 +148,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     l10n.keepAppOpenLobby,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.sunk,
-                      height: 1.4,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppTheme.sunk, height: 1.4),
                   ),
                 ),
               ),
@@ -190,9 +188,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         .startPlacement();
     if (!context.mounted) return;
     if (problems.isEmpty) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(problems.join(' '))),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(problems.join(' '))));
   }
 
   Future<void> _kick(BuildContext context, PlayerSummary player) async {
@@ -215,7 +212,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(roomSessionControllerProvider.notifier).kick(player.playerId);
+    await ref
+        .read(roomSessionControllerProvider.notifier)
+        .kick(player.playerId);
   }
 
   Future<void> _closeRoom(BuildContext context) async {
@@ -312,9 +311,8 @@ class _InviteCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               l10n.shareCodeHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                height: 1.35,
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(height: 1.35),
             ),
           ],
         ),
@@ -330,7 +328,9 @@ class _InviteCard extends StatelessWidget {
       ..writeln(l10n.shareCodeLine(code));
     if (session.hostAddresses.isNotEmpty) {
       text.writeln(
-        l10n.shareAddressLine('${session.hostAddresses.first}:${session.hostPort}'),
+        l10n.shareAddressLine(
+          '${session.hostAddresses.first}:${session.hostPort}',
+        ),
       );
     }
     text.write(l10n.shareWifiLine);
@@ -350,9 +350,8 @@ class _InviteCard extends StatelessWidget {
       );
     } on Object {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.sharingNotAvailable)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.sharingNotAvailable)));
     }
   }
 }
@@ -394,11 +393,14 @@ class _SettingsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            _KeyValue(label: l10n.board, value: '${config.rows}×${config.columns}'),
+            _KeyValue(
+              label: l10n.board,
+              value: '${config.rows}×${config.columns}',
+            ),
             _KeyValue(
               label: l10n.fleet,
               value: l10n.fleetSettingsValue(
-                config.fleetPreset.label,
+                config.fleetPreset.localizedLabel(l10n),
                 config.fleetPreset.shipCount,
                 config.fleetPreset.shipSummary,
               ),
@@ -418,9 +420,8 @@ class _SettingsCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 l10n.onlyHostChangesSettings,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppTheme.sunk,
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppTheme.sunk),
               ),
             ],
           ],
@@ -487,9 +488,8 @@ class _PlayerRow extends StatelessWidget {
                       child: Text(
                         _statusLabel(player.status, l10n),
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: _statusColor(player.status),
-                        ),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: _statusColor(player.status)),
                       ),
                     ),
                     if (player.ready) ...<Widget>[
@@ -498,9 +498,8 @@ class _PlayerRow extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         l10n.ready,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppTheme.accent,
-                        ),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: AppTheme.accent),
                       ),
                     ],
                   ],

@@ -97,6 +97,9 @@
   "frozenDefaults": "Frozen defaults",
   "network": "Network",
   "discovery": "Discovery",
+  "fleetPresetSmall": "Small",
+  "fleetPresetStandard": "Standard",
+  "fleetPresetLarge": "Large",
   "fleetConstraintValue": "Standard · {lengths}",
   "@fleetConstraintValue": {
     "placeholders": {
@@ -292,7 +295,7 @@
   "youWillLeaveMatch": "You will leave this match.",
   "target": "Target",
   "noTargetsLeft": "There is nobody left to shoot at.",
-  "boardLegend": "Dot: miss · Cross: hit · Ring: sunk",
+  "boardLegend": "Dot: miss · Filled dot: hit · Ring: sunk",
   "selectedCell": "Selected: {cell}",
   "@selectedCell": {
     "placeholders": {

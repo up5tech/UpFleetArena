@@ -16,6 +16,12 @@ import '../../../shared/models/room_models.dart';
 import '../../rooms/domain/room_session_controller.dart';
 import '../../../shared/widgets/board_canvas.dart';
 
+/// Sizes an action button to its content so its label stays on one line.
+final ButtonStyle _actionButtonStyle = OutlinedButton.styleFrom(
+  minimumSize: const Size(0, 48),
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+);
+
 /// The screen where a player prepares their own fleet.
 ///
 /// Every placement is confirmed by the Host before it is shown, so the board
@@ -111,11 +117,11 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final ShipPlacement? preview = _preview;
     if (preview == null) return true;
     return validateShipPlacement(
-      board: _board,
-      profile: _profile,
-      ships: _ships,
-      candidate: preview,
-    ) ==
+          board: _board,
+          profile: _profile,
+          ships: _ships,
+          candidate: preview,
+        ) ==
         null;
   }
 
@@ -138,8 +144,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final bool ready = session.isPlacementReady;
     final int? remaining = _remaining;
     // A confirmed fleet is locked for the rest of the preparation phase.
-    final bool locked =
-        snapshot.status == RoomStatus.placement && ready;
+    final bool locked = snapshot.status == RoomStatus.placement && ready;
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
 
@@ -183,32 +188,30 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               onSelect: _selectShip,
             ),
             const SizedBox(height: 12),
-            Row(
+            // A Wrap keeps every label on one line: with fixed thirds the
+            // longer Vietnamese labels ("Hoàn tác", "Tự động") broke
+            // mid-word on a 393 pt phone.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: <Widget>[
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _selectedShipId == null || locked
-                        ? null
-                        : _rotate,
-                    icon: const Icon(Icons.rotate_right, size: 18),
-                    label: Text(l10n.rotate),
-                  ),
+                OutlinedButton.icon(
+                  style: _actionButtonStyle,
+                  onPressed: _selectedShipId == null || locked ? null : _rotate,
+                  icon: const Icon(Icons.rotate_right, size: 18),
+                  label: Text(l10n.rotate),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _undoStack.isEmpty ? null : _undo,
-                    icon: const Icon(Icons.undo, size: 18),
-                    label: Text(l10n.undo),
-                  ),
+                OutlinedButton.icon(
+                  style: _actionButtonStyle,
+                  onPressed: _undoStack.isEmpty ? null : _undo,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: Text(l10n.undo),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: locked ? null : _autoPlace,
-                    icon: const Icon(Icons.auto_awesome, size: 18),
-                    label: Text(l10n.auto),
-                  ),
+                OutlinedButton.icon(
+                  style: _actionButtonStyle,
+                  onPressed: locked ? null : _autoPlace,
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: Text(l10n.auto),
                 ),
               ],
             ),
@@ -279,10 +282,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
       column: cell.column,
     );
 
-    final List<ShipPlacement> next = _ships
-        .where((ShipPlacement ship) => ship.shipId != shipId)
-        .toList()
-      ..add(candidate);
+    final List<ShipPlacement> next =
+        _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
+          ..add(candidate);
 
     final PlacementError? error = validateFleetLayout(
       board: _board,
@@ -326,10 +328,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     }
 
     final ShipPlacement rotated = placed.rotated();
-    final List<ShipPlacement> next = _ships
-        .where((ShipPlacement ship) => ship.shipId != shipId)
-        .toList()
-      ..add(rotated);
+    final List<ShipPlacement> next =
+        _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
+          ..add(rotated);
 
     final PlacementError? error = validateFleetLayout(
       board: _board,
@@ -530,8 +531,7 @@ class _CountdownCard extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final int minutes = remaining ~/ 60;
     final int seconds = remaining % 60;
-    final String clock =
-        '$minutes:${seconds.toString().padLeft(2, '0')}';
+    final String clock = '$minutes:${seconds.toString().padLeft(2, '0')}';
 
     return Card(
       child: Padding(
@@ -551,9 +551,8 @@ class _CountdownCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     l10n.autoPlaceHint,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      height: 1.35,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(height: 1.35),
                   ),
                 ],
               ),
@@ -581,10 +580,7 @@ class _ReadinessCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              l10n.players,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text(l10n.players, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (players.isEmpty)
               Text(l10n.nobodyInRoom)
@@ -601,7 +597,9 @@ class _ReadinessCard extends StatelessWidget {
                         ),
                       ),
                       Icon(
-                        player.ready ? Icons.check_circle : Icons.hourglass_empty,
+                        player.ready
+                            ? Icons.check_circle
+                            : Icons.hourglass_empty,
                         size: 16,
                         color: player.ready
                             ? AppTheme.accent

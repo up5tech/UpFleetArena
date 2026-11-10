@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:upfleet_arena/l10n/fleet_preset_label.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
@@ -36,13 +37,14 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final bool isHost = session.isHost;
-    final int seated = session.snapshot?.players
-        .where(
-          (PlayerSummary player) =>
-              player.status == PlayerConnectionStatus.connected ||
-              player.status == PlayerConnectionStatus.disconnected,
-        )
-        .length ??
+    final int seated =
+        session.snapshot?.players
+            .where(
+              (PlayerSummary player) =>
+                  player.status == PlayerConnectionStatus.connected ||
+                  player.status == PlayerConnectionStatus.disconnected,
+            )
+            .length ??
         0;
 
     final List<String> liveProblems = _draft.validate();
@@ -69,9 +71,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   min: RoomConfig.minimumDimension,
                   max: RoomConfig.maximumDimension,
                   enabled: isHost,
-                  onChanged: (int value) => _edit(
-                    _draft.copyWith(rows: value),
-                  ),
+                  onChanged: (int value) => _edit(_draft.copyWith(rows: value)),
                 ),
                 _StepperRow(
                   label: l10n.columns,
@@ -79,9 +79,8 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   min: RoomConfig.minimumDimension,
                   max: RoomConfig.maximumDimension,
                   enabled: isHost,
-                  onChanged: (int value) => _edit(
-                    _draft.copyWith(columns: value),
-                  ),
+                  onChanged: (int value) =>
+                      _edit(_draft.copyWith(columns: value)),
                 ),
               ],
             ),
@@ -110,9 +109,8 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                       : RoomConfig.minimumPlayers,
                   max: RoomConfig.maximumPlayers,
                   enabled: isHost,
-                  onChanged: (int value) => _edit(
-                    _draft.copyWith(maxPlayers: value),
-                  ),
+                  onChanged: (int value) =>
+                      _edit(_draft.copyWith(maxPlayers: value)),
                 ),
                 if (seated > 0)
                   Padding(
@@ -135,9 +133,8 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   max: RoomConfig.maximumPlacementSeconds,
                   step: 15,
                   enabled: isHost,
-                  onChanged: (int value) => _edit(
-                    _draft.copyWith(placementDurationSeconds: value),
-                  ),
+                  onChanged: (int value) =>
+                      _edit(_draft.copyWith(placementDurationSeconds: value)),
                 ),
                 _TimerSlider(
                   label: l10n.eachTurn,
@@ -146,9 +143,8 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                   max: RoomConfig.maximumTurnSeconds,
                   step: 5,
                   enabled: isHost,
-                  onChanged: (int value) => _edit(
-                    _draft.copyWith(turnDurationSeconds: value),
-                  ),
+                  onChanged: (int value) =>
+                      _edit(_draft.copyWith(turnDurationSeconds: value)),
                 ),
               ],
             ),
@@ -177,9 +173,7 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
             if (isHost) ...<Widget>[
               const SizedBox(height: 8),
               TextButton(
-                onPressed: _saving
-                    ? null
-                    : () => _edit(RoomConfig.defaults),
+                onPressed: _saving ? null : () => _edit(RoomConfig.defaults),
                 child: Text(l10n.resetToDefaults),
               ),
             ],
@@ -332,7 +326,10 @@ class _FleetOption extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    l10n.fleetOptionLabel(preset.label, preset.shipCount),
+                    l10n.fleetOptionLabel(
+                      preset.localizedLabel(l10n),
+                      preset.shipCount,
+                    ),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
@@ -383,12 +380,17 @@ class _TimerSlider extends StatelessWidget {
           Row(
             children: <Widget>[
               Expanded(
-                child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
               Text(
                 '$value s',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
                 ),
               ),
             ],

@@ -60,14 +60,22 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     if (!session.isInRoom) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.matchEnded)),
-        body: Center(child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(session.errorMessage ?? l10n.roomHasClosed),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: () => _exit(session), child: Text(l10n.backToHome)),
-          ]),
-        )),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(session.errorMessage ?? l10n.roomHasClosed),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => _exit(session),
+                  child: Text(l10n.backToHome),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
     if (snapshot == null) {
@@ -78,9 +86,11 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     }
 
     ref.listen(roomSessionControllerProvider, (previous, next) {
-      if (previous?.matchSnapshot?.turnNumber != next.matchSnapshot?.turnNumber ||
+      if (previous?.matchSnapshot?.turnNumber !=
+              next.matchSnapshot?.turnNumber ||
           previous?.matchSnapshot?.matchId != next.matchSnapshot?.matchId ||
-          next.matchSnapshot?.targetById(_selectedTargetId ?? '')?.alive == false) {
+          next.matchSnapshot?.targetById(_selectedTargetId ?? '')?.alive ==
+              false) {
         setState(() => _selectedCell = null);
       }
 
@@ -93,9 +103,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       }
       // The Host broadcast the final result for the first time.
       if (next.matchResult != null && previous?.matchResult == null) {
-        feedback.matchFinished(
-          won: next.matchResult!.winnerPlayerId == viewer,
-        );
+        feedback.matchFinished(won: next.matchResult!.winnerPlayerId == viewer);
       }
     });
 
@@ -116,14 +124,18 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       _tabsReducedMotion = reducedMotion;
     }
     final TabController tabs = _tabs!;
-    final bool isMyTurn = session.isInRoom && snapshot.winnerPlayerId == null &&
+    final bool isMyTurn =
+        session.isInRoom &&
+        snapshot.winnerPlayerId == null &&
         snapshot.activePlayerId == session.playerId &&
         snapshot.playerById(session.playerId ?? '')?.alive == true;
     final int? remaining = session.turnCountdown?.remaining;
 
     final List<TargetBoardView> living = snapshot.livingTargets;
-    final String? targetId = living.any((target) => target.playerId == _selectedTargetId)
-        ? _selectedTargetId : living.firstOrNull?.playerId;
+    final String? targetId =
+        living.any((target) => target.playerId == _selectedTargetId)
+        ? _selectedTargetId
+        : living.firstOrNull?.playerId;
     final bool spectating = session.isSpectating;
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
@@ -164,7 +176,9 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
                 onCellTapped: (CellCoord cell) {
                   setState(() => _selectedCell = cell);
                 },
-                onFire: () { if (targetId != null) unawaited(_fire(targetId)); },
+                onFire: () {
+                  if (targetId != null) unawaited(_fire(targetId));
+                },
               ),
             _OwnBoardTab(snapshot: snapshot, session: session),
             _PlayersTab(snapshot: snapshot, session: session),
@@ -188,9 +202,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
         builder: (BuildContext dialogContext) => AlertDialog(
           title: Text(session.isHost ? l10n.endTheRoom : l10n.leaveTheMatch),
           content: Text(
-            session.isHost
-                ? l10n.endMatchForEveryone
-                : l10n.youWillLeaveMatch,
+            session.isHost ? l10n.endMatchForEveryone : l10n.youWillLeaveMatch,
           ),
           actions: <Widget>[
             TextButton(
@@ -225,11 +237,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     setState(() => _selectedCell = null);
     await ref
         .read(roomSessionControllerProvider.notifier)
-        .fire(
-          targetPlayerId: targetId,
-          row: cell.row,
-          column: cell.column,
-        );
+        .fire(targetPlayerId: targetId, row: cell.row, column: cell.column);
   }
 }
 
@@ -266,7 +274,8 @@ class _BattleTab extends StatelessWidget {
         ? null
         : snapshot.targetById(selectedTargetId!);
 
-    final bool alreadyFired = target != null &&
+    final bool alreadyFired =
+        target != null &&
         selectedCell != null &&
         target.shots.any(
           (ShotView shot) =>
@@ -274,8 +283,11 @@ class _BattleTab extends StatelessWidget {
               shot.column == selectedCell!.column,
         );
     final bool canInteract = isMyTurn && !session.firePending && remaining != 0;
-    final bool canFire = canInteract && target?.alive == true &&
-        selectedCell != null && !alreadyFired;
+    final bool canFire =
+        canInteract &&
+        target?.alive == true &&
+        selectedCell != null &&
+        !alreadyFired;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -288,20 +300,24 @@ class _BattleTab extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         if (session.combatError != null) ...[
-          Text(session.combatError!, style: const TextStyle(color: AppTheme.danger)),
+          Text(
+            session.combatError!,
+            style: const TextStyle(color: AppTheme.danger),
+          ),
           const SizedBox(height: 12),
         ],
         if (session.lastActivity case final PublicActivity activity) ...[
           Text(_activityText(activity, l10n)),
           const SizedBox(height: 12),
         ],
-        if (snapshot.winnerPlayerId == null) _TurnCard(
-          isMyTurn: isMyTurn,
-          activePlayerName:
-              snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
-          remaining: remaining,
-          turnNumber: snapshot.turnNumber,
-        ),
+        if (snapshot.winnerPlayerId == null)
+          _TurnCard(
+            isMyTurn: isMyTurn,
+            activePlayerName:
+                snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
+            remaining: remaining,
+            turnNumber: snapshot.turnNumber,
+          ),
         AnimatedSwitcher(
           duration: reducedMotion
               ? Duration.zero
@@ -330,8 +346,17 @@ class _BattleTab extends StatelessWidget {
               for (final TargetBoardView opponent in targets)
                 ChoiceChip(
                   label: Text(opponent.displayName),
+                  // The chip theme forces light labels, which is unreadable on
+                  // the amber selected background.
+                  labelStyle: opponent.playerId == selectedTargetId
+                      ? TextStyle(
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        )
+                      : null,
                   selected: opponent.playerId == selectedTargetId,
-                  onSelected: canInteract ? (_) => onTargetSelected(opponent.playerId) : null,
+                  onSelected: canInteract
+                      ? (_) => onTargetSelected(opponent.playerId)
+                      : null,
                 ),
             ],
           ),
@@ -369,14 +394,18 @@ class _BattleTab extends StatelessWidget {
                   ),
           ),
         const SizedBox(height: 16),
-        if (snapshot.winnerPlayerId == null) FilledButton.icon(
-          onPressed: canFire ? onFire : null,
-          icon: const Icon(Icons.local_fire_department),
-          label: Text(
-            session.firePending ? l10n.waitingForHost :
-                isMyTurn ? l10n.fireAtThisCell : l10n.waitForYourTurn,
+        if (snapshot.winnerPlayerId == null)
+          FilledButton.icon(
+            onPressed: canFire ? onFire : null,
+            icon: const Icon(Icons.local_fire_department),
+            label: Text(
+              session.firePending
+                  ? l10n.waitingForHost
+                  : isMyTurn
+                  ? l10n.fireAtThisCell
+                  : l10n.waitForYourTurn,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -442,9 +471,15 @@ class _OwnBoardTab extends StatelessWidget {
                       .where((ShipView ship) => ship.sunk)
                       .map((ShipView ship) => ship.shipId)
                       .toSet(),
-                  shots: board.ships.expand((ShipView ship) => ship.hitCells).toList(),
+                  shots: board.ships
+                      .expand((ShipView ship) => ship.hitCells)
+                      .toList(),
                   misses: board.shotsReceived
-                      .where((CellCoord cell) => !board.ships.any((ShipView ship) => ship.hitCells.contains(cell)))
+                      .where(
+                        (CellCoord cell) => !board.ships.any(
+                          (ShipView ship) => ship.hitCells.contains(cell),
+                        ),
+                      )
                       .toList(),
                 ),
               );
@@ -453,7 +488,8 @@ class _OwnBoardTab extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             l10n.ownBoardHint,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(height: 1.35),
           ),
         ],
       ],
@@ -510,7 +546,9 @@ class _PlayersTab extends StatelessWidget {
                 Icon(
                   player.alive ? Icons.circle : Icons.person_off,
                   size: 14,
-                  color: player.alive ? AppTheme.accent : AppTheme.textSecondary,
+                  color: player.alive
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -530,7 +568,10 @@ class _PlayersTab extends StatelessWidget {
 }
 
 class _WinnerCard extends StatelessWidget {
-  const _WinnerCard({required this.winnerPlayerId, required this.viewerPlayerId});
+  const _WinnerCard({
+    required this.winnerPlayerId,
+    required this.viewerPlayerId,
+  });
 
   final String winnerPlayerId;
   final String? viewerPlayerId;

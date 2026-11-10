@@ -201,6 +201,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discovery => 'Discovery';
 
   @override
+  String get fleetPresetSmall => 'Small';
+
+  @override
+  String get fleetPresetStandard => 'Standard';
+
+  @override
+  String get fleetPresetLarge => 'Large';
+
+  @override
   String fleetConstraintValue(String lengths) {
     return 'Standard · $lengths';
   }
@@ -578,7 +587,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noTargetsLeft => 'There is nobody left to shoot at.';
 
   @override
-  String get boardLegend => 'Dot: miss · Cross: hit · Ring: sunk';
+  String get boardLegend => 'Dot: miss · Filled dot: hit · Ring: sunk';
 
   @override
   String selectedCell(String cell) {

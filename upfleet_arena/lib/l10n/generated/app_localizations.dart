@@ -446,6 +446,24 @@ abstract class AppLocalizations {
   /// **'Discovery'**
   String get discovery;
 
+  /// No description provided for @fleetPresetSmall.
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get fleetPresetSmall;
+
+  /// No description provided for @fleetPresetStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get fleetPresetStandard;
+
+  /// No description provided for @fleetPresetLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get fleetPresetLarge;
+
   /// No description provided for @fleetConstraintValue.
   ///
   /// In en, this message translates to:
@@ -1097,7 +1115,7 @@ abstract class AppLocalizations {
   /// No description provided for @boardLegend.
   ///
   /// In en, this message translates to:
-  /// **'Dot: miss · Cross: hit · Ring: sunk'**
+  /// **'Dot: miss · Filled dot: hit · Ring: sunk'**
   String get boardLegend;
 
   /// No description provided for @selectedCell.

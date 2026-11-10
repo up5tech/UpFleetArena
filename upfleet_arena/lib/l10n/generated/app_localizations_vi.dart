@@ -201,6 +201,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get discovery => 'Dò tìm';
 
   @override
+  String get fleetPresetSmall => 'Nhỏ';
+
+  @override
+  String get fleetPresetStandard => 'Chuẩn';
+
+  @override
+  String get fleetPresetLarge => 'Lớn';
+
+  @override
   String fleetConstraintValue(String lengths) {
     return 'Chuẩn · $lengths';
   }
@@ -573,7 +582,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noTargetsLeft => 'Không còn ai để bắn.';
 
   @override
-  String get boardLegend => 'Chấm: trượt · Chữ thập: trúng · Vòng: chìm';
+  String get boardLegend => 'Chấm: trượt · Chấm đầy: trúng · Vòng: chìm';
 
   @override
   String selectedCell(String cell) {
