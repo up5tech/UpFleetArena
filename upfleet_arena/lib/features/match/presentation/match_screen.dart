@@ -247,6 +247,9 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
 }
 
 class _BattleTab extends StatelessWidget {
+  /// Below this width the two fleets stack instead of sitting side by side.
+  static const double _sideBySideWidth = 720;
+
   const _BattleTab({
     required this.snapshot,
     required this.session,
@@ -294,50 +297,53 @@ class _BattleTab extends StatelessWidget {
         selectedCell != null &&
         !alreadyFired;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: <Widget>[
-        if (snapshot.winnerPlayerId != null) ...<Widget>[
-          _WinnerCard(
-            winnerPlayerId: snapshot.winnerPlayerId!,
-            viewerPlayerId: session.playerId ?? '',
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (session.combatError != null) ...[
-          Text(
-            session.combatError!,
-            style: const TextStyle(color: AppTheme.danger),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (session.lastActivity case final PublicActivity activity) ...[
-          Text(_activityText(activity, l10n)),
-          const SizedBox(height: 12),
-        ],
-        if (snapshot.winnerPlayerId == null)
-          _TurnCard(
-            isMyTurn: isMyTurn,
-            activePlayerName:
-                snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
-            remaining: remaining,
-            turnNumber: snapshot.turnNumber,
-          ),
-        AnimatedSwitcher(
-          duration: reducedMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 220),
-          child: session.lastShot == null
-              ? const SizedBox.shrink(key: ValueKey<String>('no-shot'))
-              : Padding(
-                  key: ValueKey<ShotFeedback>(session.lastShot!),
-                  padding: const EdgeInsets.only(top: 12),
-                  child: _FeedbackCard(
-                    feedback: session.lastShot!,
-                    viewerPlayerId: session.playerId,
-                  ),
-                ),
+    final List<Widget> header = <Widget>[
+      if (snapshot.winnerPlayerId != null) ...<Widget>[
+        _WinnerCard(
+          winnerPlayerId: snapshot.winnerPlayerId!,
+          viewerPlayerId: session.playerId ?? '',
         ),
+        const SizedBox(height: 12),
+      ],
+      if (session.combatError != null) ...[
+        Text(
+          session.combatError!,
+          style: const TextStyle(color: AppTheme.danger),
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (session.lastActivity case final PublicActivity activity) ...[
+        Text(_activityText(activity, l10n)),
+        const SizedBox(height: 12),
+      ],
+      if (snapshot.winnerPlayerId == null)
+        _TurnCard(
+          isMyTurn: isMyTurn,
+          activePlayerName:
+              snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
+          remaining: remaining,
+          turnNumber: snapshot.turnNumber,
+        ),
+      AnimatedSwitcher(
+        duration: reducedMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 220),
+        child: session.lastShot == null
+            ? const SizedBox.shrink(key: ValueKey<String>('no-shot'))
+            : Padding(
+                key: ValueKey<ShotFeedback>(session.lastShot!),
+                padding: const EdgeInsets.only(top: 12),
+                child: _FeedbackCard(
+                  feedback: session.lastShot!,
+                  viewerPlayerId: session.playerId,
+                ),
+              ),
+      ),
+    ];
+
+    final Widget attack = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
         const SizedBox(height: 16),
         Text(l10n.target, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
@@ -411,11 +417,39 @@ class _BattleTab extends StatelessWidget {
                   : l10n.waitForYourTurn,
             ),
           ),
-        // The own fleet is part of the battle view: the player reads both
-        // boards in one scroll instead of switching tabs.
-        const SizedBox(height: 24),
-        _OwnFleetSection(snapshot: snapshot, session: session),
       ],
+    );
+
+    final Widget ownFleet = _OwnFleetSection(
+      snapshot: snapshot,
+      session: session,
+    );
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // Wide screens show both fleets at once instead of one below the other.
+        final bool sideBySide = constraints.maxWidth >= _sideBySideWidth;
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: <Widget>[
+            ...header,
+            if (sideBySide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(child: attack),
+                  const SizedBox(width: 16),
+                  Expanded(child: ownFleet),
+                ],
+              )
+            else ...<Widget>[
+              attack,
+              const SizedBox(height: 24),
+              ownFleet,
+            ],
+          ],
+        );
+      },
     );
   }
 

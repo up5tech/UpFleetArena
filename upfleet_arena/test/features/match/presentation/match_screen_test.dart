@@ -163,7 +163,10 @@ void main() {
   setUp(() async {
     final TestWidgetsFlutterBinding binding =
         TestWidgetsFlutterBinding.ensureInitialized();
-    binding.platformDispatcher.views.first.physicalSize = const Size(1200, 3000);
+    binding.platformDispatcher.views.first.physicalSize = const Size(
+      1200,
+      3000,
+    );
     binding.platformDispatcher.views.first.devicePixelRatio = 1;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     _testPreferences = await SharedPreferences.getInstance();
@@ -189,6 +192,35 @@ void main() {
     expect(find.byType(BoardCanvas), findsOneWidget);
   });
 
+  testWidgets('a wide screen shows both fleets side by side', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(_FakeSessionController(session: _session())));
+
+    expect(find.text('Your fleet'), findsOneWidget);
+
+    final Rect attack = tester.getRect(find.byType(BattleBoard));
+    final Rect own = tester.getRect(find.byType(BoardCanvas));
+    // The own fleet starts to the right of the attack board, not below it.
+    expect(own.left, greaterThan(attack.right));
+    expect(own.top, lessThan(attack.bottom));
+  });
+
+  testWidgets('a narrow screen stacks the own fleet below', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_app(_FakeSessionController(session: _session())));
+    await tester.pump();
+
+    final Rect attack = tester.getRect(find.byType(BattleBoard));
+    final Rect own = tester.getRect(find.byType(BoardCanvas));
+    expect(own.top, greaterThan(attack.bottom));
+  });
+
   testWidgets('firing sends the shot of the picked cell', (
     WidgetTester tester,
   ) async {
@@ -202,7 +234,10 @@ void main() {
 
     final Rect board = tester.getRect(find.byType(BattleBoard));
     final double cell = board.width / RoomConfig.defaults.columns;
-    await tester.tapAt(Offset(board.left + cell * 4, board.top + cell * 4));
+    // Tap the middle of the cell, not its edge.
+    await tester.tapAt(
+      Offset(board.left + cell * 4.5, board.top + cell * 4.5),
+    );
     await tester.pump();
 
     await tester.tap(find.text('Fire at this cell'));
