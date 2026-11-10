@@ -227,12 +227,16 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     );
   }
 
-  /// Plays the short warning once, when the current turn is nearly over.
+  /// Plays the short warning once, when the local player's turn is nearly over.
+  ///
+  /// Only the player who has to act hears it: other turns and spectators stay
+  /// silent, so the sound always means "you are about to lose your turn".
   void _warnIfTurnEnding() {
     if (!mounted) return;
     final RoomSessionState session = ref.read(roomSessionControllerProvider);
     final MatchSnapshot? match = session.matchSnapshot;
     if (match == null || match.winnerPlayerId != null) return;
+    if (match.activePlayerId != session.playerId) return;
     if (!isUrgentTurn(session.turnCountdown?.remaining)) return;
 
     final String turn = '${match.matchId}:${match.turnNumber}';

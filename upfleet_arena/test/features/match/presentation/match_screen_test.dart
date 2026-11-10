@@ -395,6 +395,40 @@ void main() {
     expect(sounds.played, <GameSound>[GameSound.warning]);
   });
 
+  testWidgets('another player\'s last seconds stay silent', (
+    WidgetTester tester,
+  ) async {
+    final _RecordingSoundPlayer sounds = _RecordingSoundPlayer();
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(myTurn: false, turnSeconds: 4),
+        ),
+        sounds: sounds,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(sounds.played, isEmpty);
+  });
+
+  testWidgets('a spectator hears no warning', (WidgetTester tester) async {
+    final _RecordingSoundPlayer sounds = _RecordingSoundPlayer();
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(myTurn: false, eliminated: true, turnSeconds: 4),
+        ),
+        sounds: sounds,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(sounds.played, isEmpty);
+  });
+
   testWidgets('a turn with time left plays no warning', (
     WidgetTester tester,
   ) async {
