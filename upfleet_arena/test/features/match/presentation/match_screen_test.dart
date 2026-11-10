@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:upfleet_arena/app/theme/app_theme.dart';
 import 'package:upfleet_arena/core/providers.dart';
 import 'package:upfleet_arena/core/services/match_feedback.dart';
 import 'package:upfleet_arena/core/storage/local_preferences.dart';
@@ -109,6 +110,7 @@ RoomSessionState _session({
   bool eliminated = false,
   List<PublicActivity> activityFeed = const <PublicActivity>[],
   MatchResult? matchResult,
+  int turnSeconds = 22,
 }) => RoomSessionState(
   role: RoomRole.client,
   status: RoomSessionStatus.inRoom,
@@ -126,7 +128,7 @@ RoomSessionState _session({
   lastShot: feedback,
   activityFeed: activityFeed,
   matchResult: matchResult,
-  turnCountdown: Countdown(remainingSeconds: 22),
+  turnCountdown: Countdown(remainingSeconds: turnSeconds),
 );
 
 /// A sound player that records nothing and touches no audio backend, so the
@@ -303,6 +305,10 @@ void main() {
     // Only the player whose turn it is carries the countdown.
     expect(find.text('22s'), findsOneWidget);
     expect(
+      tester.widget<Text>(find.text('22s')).style?.color,
+      AppTheme.accent,
+    );
+    expect(
       find.descendant(
         of: find
             .ancestor(of: find.text('Alice (you)'), matching: find.byType(Row))
@@ -324,6 +330,19 @@ void main() {
     final Rect attack = tester.getRect(find.byType(BattleBoard));
     final Rect roster = tester.getRect(find.text('Turn order'));
     expect(roster.left, greaterThan(attack.right));
+  });
+
+  testWidgets('a turn that is nearly over warns in the player list', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session(turnSeconds: 4))),
+    );
+
+    final Text clock = tester.widget<Text>(find.text('4s'));
+    expect(clock.style?.color, AppTheme.danger);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.hourglass_bottom), findsNothing);
   });
 
   testWidgets('a narrow screen keeps the players in a tab', (

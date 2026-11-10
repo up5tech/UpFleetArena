@@ -620,6 +620,9 @@ class _PlayersSection extends StatelessWidget {
 
 /// One compact line of the player list.
 class _PlayerRow extends StatelessWidget {
+  /// From this many seconds left the clock starts warning the table.
+  static const int _urgentSeconds = 5;
+
   const _PlayerRow({
     required this.player,
     required this.isViewer,
@@ -639,9 +642,17 @@ class _PlayerRow extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextTheme text = Theme.of(context).textTheme;
     final Color status = player.alive ? AppTheme.accent : AppTheme.textSecondary;
+    final bool urgent = remaining != null && remaining! <= _urgentSeconds;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 1),
+      padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+      decoration: urgent
+          ? BoxDecoration(
+              color: AppTheme.danger.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            )
+          : null,
       child: Row(
         children: <Widget>[
           // The status keeps a text label for screen readers even though the
@@ -670,12 +681,16 @@ class _PlayerRow extends StatelessWidget {
           ),
           if (remaining case final int seconds) ...<Widget>[
             const SizedBox(width: 8),
-            Icon(Icons.hourglass_bottom, size: 12, color: AppTheme.accent),
+            Icon(
+              urgent ? Icons.timer_outlined : Icons.hourglass_bottom,
+              size: 12,
+              color: urgent ? AppTheme.danger : AppTheme.accent,
+            ),
             const SizedBox(width: 2),
             Text(
               l10n.secondsShort(seconds),
               style: text.labelSmall?.copyWith(
-                color: AppTheme.accent,
+                color: urgent ? AppTheme.danger : AppTheme.accent,
                 fontWeight: FontWeight.w600,
               ),
             ),
