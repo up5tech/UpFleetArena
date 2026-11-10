@@ -458,6 +458,48 @@ abstract class AppLocalizations {
   /// **'The computer plays on this device. Place your fleet, then take turns firing at each other.'**
   String get practiceHint;
 
+  /// No description provided for @addComputerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a computer opponent'**
+  String get addComputerTitle;
+
+  /// No description provided for @addComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add computer'**
+  String get addComputer;
+
+  /// No description provided for @addComputerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A computer takes a seat like any player: it places its own fleet and fires on its turns. Only the host can add or remove it.'**
+  String get addComputerHint;
+
+  /// No description provided for @computer.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer'**
+  String get computer;
+
+  /// No description provided for @computerOpponents.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer opponents'**
+  String get computerOpponents;
+
+  /// No description provided for @computerCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Computers'**
+  String get computerCount;
+
+  /// No description provided for @computerSettingsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Computers join as soon as you save and place their own fleet. They take a real seat, so the room capacity still applies.'**
+  String get computerSettingsHint;
+
   /// No description provided for @lobbySubtitle.
   ///
   /// In en, this message translates to:

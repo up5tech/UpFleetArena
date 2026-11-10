@@ -212,6 +212,29 @@ class AppLocalizationsEn extends AppLocalizations {
       'The computer plays on this device. Place your fleet, then take turns firing at each other.';
 
   @override
+  String get addComputerTitle => 'Add a computer opponent';
+
+  @override
+  String get addComputer => 'Add computer';
+
+  @override
+  String get addComputerHint =>
+      'A computer takes a seat like any player: it places its own fleet and fires on its turns. Only the host can add or remove it.';
+
+  @override
+  String get computer => 'Computer';
+
+  @override
+  String get computerOpponents => 'Computer opponents';
+
+  @override
+  String get computerCount => 'Computers';
+
+  @override
+  String get computerSettingsHint =>
+      'Computers join as soon as you save and place their own fleet. They take a real seat, so the room capacity still applies.';
+
+  @override
   String get lobbySubtitle => 'Seats, readiness and starting the match';
 
   @override

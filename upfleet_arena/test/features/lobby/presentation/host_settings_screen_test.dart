@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/features/lobby/presentation/host_settings_screen.dart';
+import 'package:upfleet_arena/game_engine/bot/bot_brain.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
@@ -16,12 +18,16 @@ class _FakeSessionController extends RoomSessionController {
 
   final RoomSessionState session;
   final List<String> saveProblems;
+  RoomConfig? saved;
 
   @override
   RoomSessionState build() => session;
 
   @override
-  Future<List<String>> updateConfig(RoomConfig config) async => saveProblems;
+  Future<List<String>> updateConfig(RoomConfig config) async {
+    saved = config;
+    return saveProblems;
+  }
 }
 
 RoomSnapshot _snapshot() => const RoomSnapshot(
@@ -72,6 +78,34 @@ Widget _app(RoomSessionState session, {List<String> saveProblems = const <String
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
       home: const HostSettingsScreen(),
+    ),
+  );
+}
+
+/// The same screen behind a router, so the save action can pop back.
+Widget _routedApp(_FakeSessionController controller) {
+  final GoRouter router = GoRouter(
+    routes: <RouteBase>[
+      GoRoute(
+        path: '/',
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Text('home')),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (BuildContext context, GoRouterState state) =>
+            const HostSettingsScreen(),
+      ),
+    ],
+  );
+
+  return ProviderScope(
+    overrides: [roomSessionControllerProvider.overrideWith(() => controller)],
+    child: MaterialApp.router(
+      routerConfig: router,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
     ),
   );
 }
@@ -147,5 +181,47 @@ void main() {
       ),
     );
     expect(increase.onPressed, isNull);
+  });
+
+  testWidgets('the host presets computer opponents', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _hostSession(),
+    );
+    final Widget app = _routedApp(controller);
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    final GoRouter router = GoRouter.of(tester.element(find.text('home')));
+    router.push('/settings');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Computer opponents'), findsOneWidget);
+
+    // A free seat is still available, so the count can go up.
+    final IconButton add = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Increase Computers'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(add.onPressed, isNotNull);
+
+    await tester.tap(find.byTooltip('Increase Computers'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Increase Computers'));
+    await tester.pump();
+
+    await tester.tap(find.text('Hard').last);
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save settings'));
+    await tester.pumpAndSettle();
+
+    expect(controller.saved, isNotNull);
+    expect(controller.saved!.botCount, 2);
+    expect(controller.saved!.botDifficulty, BotDifficulty.hard);
+    expect(find.text('home'), findsOneWidget);
   });
 }

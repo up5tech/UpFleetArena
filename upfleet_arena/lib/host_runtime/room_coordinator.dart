@@ -51,9 +51,22 @@ class RoomCoordinator {
     DateTime Function()? clock,
     this.botThinkingTime = const Duration(milliseconds: 900),
     Random? botRandom,
+    String Function(BotDifficulty difficulty)? botNameBuilder,
   }) : registry = registry ?? ClientConnectionRegistry(),
        botRandom = botRandom ?? Random(),
+       _botNameBuilder = botNameBuilder ?? _defaultBotName,
        _clock = clock ?? _monotonicClock();
+
+  /// Names the computers the Host seats from [RoomConfig.botCount].
+  ///
+  /// The Host runtime has no access to the UI language, so the UI passes a
+  /// localized name builder when it creates the room.
+  final String Function(BotDifficulty difficulty) _botNameBuilder;
+
+  static String _defaultBotName(BotDifficulty difficulty) {
+    final String label = difficulty.name;
+    return 'Computer (${label[0].toUpperCase()}${label.substring(1)})';
+  }
 
   static DateTime Function() _monotonicClock() {
     final DateTime origin = DateTime.now();
@@ -239,6 +252,8 @@ class RoomCoordinator {
     );
 
     _state = room;
+    // The Host may have preset computers before the room is even listed.
+    _syncBots(room);
     _emitHostSnapshot();
   }
 
@@ -269,24 +284,117 @@ class RoomCoordinator {
       return <String>['The room is full.'];
     }
 
-    final DateTime now = DateTime.now();
-    final String playerId = SecureRandom.uuidV4();
-    room.players[playerId] = HostPlayer(
-      playerId: playerId,
-      displayName: DisplayNames.normalize(displayName),
-      avatarId: '🤖',
-      role: PlayerRole.player,
-      deviceId: '',
-      joinedAt: now,
-      isBot: true,
+    _seatBot(room, difficulty, displayName: displayName);
+    // The computer count in the settings always reflects the seats, so a
+    // later settings save keeps the computer that was just added.
+    room.config = room.config.copyWith(
+      botCount: room.config.botCount + 1,
       botDifficulty: difficulty,
     );
     room.stateVersion++;
 
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    await _broadcastConfig(room);
     _emitHostSnapshot();
     return const <String>[];
+  }
+
+  /// Lowers the preset computer count when a computer gives up its seat.
+  ///
+  /// Otherwise a later settings save would seat the removed computer again.
+  /// Returns whether the settings changed.
+  bool _releaseBotPreset(HostRoomState room, HostPlayer target) {
+    if (!target.isBot || room.config.botCount <= 0) return false;
+    room.config = room.config.copyWith(botCount: room.config.botCount - 1);
+    return true;
+  }
+
+  /// Seats one computer opponent and returns its seat.
+  ///
+  /// Bot names must not clash, otherwise two computers of the same strength
+  /// would be indistinguishable in the lobby and in the match.
+  HostPlayer _seatBot(
+    HostRoomState room,
+    BotDifficulty difficulty, {
+    String? displayName,
+  }) {
+    final String playerId = SecureRandom.uuidV4();
+    final HostPlayer bot = HostPlayer(
+      playerId: playerId,
+      displayName: _uniqueDisplayName(
+        room,
+        DisplayNames.normalize(displayName ?? _botNameBuilder(difficulty)),
+      ),
+      avatarId: '🤖',
+      role: PlayerRole.player,
+      deviceId: '',
+      joinedAt: _now(),
+      isBot: true,
+      botDifficulty: difficulty,
+    );
+    room.players[playerId] = bot;
+    return bot;
+  }
+
+  /// Makes the seated computers match the room settings.
+  ///
+  /// The Host owns the seats, so the preset typed into the room settings is
+  /// applied here instead of in the settings screen. Computers that are no
+  /// longer wanted (or that play at another strength) give up their seat.
+  ///
+  /// Returns whether the membership changed.
+  bool _syncBots(HostRoomState room) {
+    if (room.status != RoomStatus.lobby) return false;
+
+    final BotDifficulty strength = room.config.botDifficulty;
+    final int target = room.config.botCount;
+    final List<HostPlayer> seated = room.orderedPlayers
+        .where((HostPlayer player) => player.isBot && player.occupiesSeat)
+        .toList();
+
+    bool changed = false;
+    int kept = 0;
+    for (final HostPlayer bot in seated) {
+      if (kept < target && bot.botDifficulty == strength) {
+        kept++;
+        continue;
+      }
+      bot.status = PlayerConnectionStatus.kicked;
+      room.placements.remove(bot.playerId);
+      changed = true;
+    }
+
+    for (int index = kept; index < target; index++) {
+      // People always win a seat over a preset computer.
+      if (room.seatedCount >= room.config.maxPlayers) break;
+      _seatBot(room, strength);
+      changed = true;
+    }
+
+    if (changed) room.stateVersion++;
+    return changed;
+  }
+
+  /// A display name a new computer opponent can use without clashing.
+  ///
+  /// Two computers of the same strength would otherwise be indistinguishable
+  /// in the lobby and in the match.
+  String _uniqueDisplayName(HostRoomState room, String base) {
+    final Set<String> taken = room.players.values
+        .where((HostPlayer player) => player.occupiesSeat)
+        .map((HostPlayer player) => player.displayName.toLowerCase())
+        .toSet();
+    if (!taken.contains(base.toLowerCase())) return base;
+
+    for (int suffix = 2; suffix < 100; suffix++) {
+      final String candidate = '$base $suffix';
+      final String trimmed = candidate.length > DisplayNames.maximumLength
+          ? candidate.substring(0, DisplayNames.maximumLength).trim()
+          : candidate;
+      if (!taken.contains(trimmed.toLowerCase())) return trimmed;
+    }
+    return base;
   }
 
   /// Routes one inbound frame to the matching rule.
@@ -556,6 +664,8 @@ class RoomCoordinator {
     room.stateVersion++;
     room.placements.remove(target.playerId);
 
+    final bool botRemoved = _releaseBotPreset(room, target);
+
     final ClientSession? targetSession = registry.byPlayerId(target.playerId);
     if (targetSession != null) {
       await _transport?.send(
@@ -573,6 +683,7 @@ class RoomCoordinator {
 
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    if (botRemoved) await _broadcastConfig(room);
     await _checkPreparationCancellation(room);
     _emitHostSnapshot();
   }
@@ -634,8 +745,11 @@ class RoomCoordinator {
       await _transport?.closeConnection(targetSession.connectionId);
     }
 
+    final bool botRemoved = _releaseBotPreset(room, target);
+
     await _broadcastRoomState(room);
     await _broadcastReadiness(room);
+    if (botRemoved) await _broadcastConfig(room);
     await _checkPreparationCancellation(room);
     _emitHostSnapshot();
   }
@@ -736,6 +850,18 @@ class RoomCoordinator {
         'already seated in the room.',
       );
     }
+    // People always keep their seat: a preset computer only takes a free one.
+    final int people = room.players.values
+        .where((HostPlayer player) => player.occupiesSeat && !player.isBot)
+        .length;
+    if (people + config.botCount > config.maxPlayers) {
+      final int free = config.maxPlayers - people;
+      problems.add(
+        free <= 0
+            ? 'The room has no free seat for a computer.'
+            : 'Only $free of the seats are free for computers.',
+      );
+    }
     return problems;
   }
 
@@ -750,6 +876,10 @@ class RoomCoordinator {
 
     room.config = config;
     room.stateVersion++;
+    // A preset with more or stronger computers is applied before the clients
+    // hear about the new settings, so they see the seats and the values
+    // together.
+    final bool botsChanged = _syncBots(room);
 
     if (invalidatesLayouts) {
       for (final HostPlayerPlacement placement in room.placements.values) {
@@ -773,6 +903,10 @@ class RoomCoordinator {
       _emitHostPlacementState(room);
     }
 
+    if (botsChanged) {
+      await _broadcastRoomState(room);
+      await _broadcastReadiness(room);
+    }
     await _broadcastConfig(room);
     _emitHostSnapshot();
   }
@@ -1273,7 +1407,6 @@ class RoomCoordinator {
       stateVersion: room.stateVersion,
     );
   }
-
 
   // --------------------------------------------------------------- combat
 

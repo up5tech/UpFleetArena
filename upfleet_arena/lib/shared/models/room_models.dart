@@ -6,6 +6,8 @@
 /// receive (PLAN.md §6.5, §6.6).
 library;
 
+import '../../game_engine/bot/bot_brain.dart';
+
 /// Lifecycle phase of a room.
 enum RoomStatus {
   /// Players may join, the Host may configure the room.
@@ -137,6 +139,8 @@ class RoomConfig {
     this.maxPlayers = 6,
     this.placementDurationSeconds = 120,
     this.turnDurationSeconds = 30,
+    this.botCount = 0,
+    this.botDifficulty = BotDifficulty.medium,
   });
 
   /// Board rows. Range 8–14.
@@ -156,6 +160,16 @@ class RoomConfig {
 
   /// Turn duration in seconds. Range 15–60.
   final int turnDurationSeconds;
+
+  /// How many computer opponents the Host wants seated.
+  ///
+  /// The Host seat is never given to a computer, so the range is 0 to
+  /// `maxPlayers - 1`. Computers take a normal seat: they count against the
+  /// capacity and towards the minimum number of players.
+  final int botCount;
+
+  /// Strength the computers seated from [botCount] play at.
+  final BotDifficulty botDifficulty;
 
   /// Minimum supported board dimension.
   static const int minimumDimension = 8;
@@ -192,6 +206,8 @@ class RoomConfig {
     int? maxPlayers,
     int? placementDurationSeconds,
     int? turnDurationSeconds,
+    int? botCount,
+    BotDifficulty? botDifficulty,
   }) => RoomConfig(
     rows: rows ?? this.rows,
     columns: columns ?? this.columns,
@@ -199,6 +215,8 @@ class RoomConfig {
     maxPlayers: maxPlayers ?? this.maxPlayers,
     placementDurationSeconds: placementDurationSeconds ?? this.placementDurationSeconds,
     turnDurationSeconds: turnDurationSeconds ?? this.turnDurationSeconds,
+    botCount: botCount ?? this.botCount,
+    botDifficulty: botDifficulty ?? this.botDifficulty,
   );
 
   /// Validates the configuration.
@@ -219,6 +237,12 @@ class RoomConfig {
     if (maxPlayers < minimumPlayers || maxPlayers > maximumPlayers) {
       problems.add(
         'Player capacity must be between $minimumPlayers and $maximumPlayers.',
+      );
+    }
+    if (botCount < 0 || botCount > maxPlayers - 1) {
+      problems.add(
+        'Computer opponents must be between 0 and ${maxPlayers - 1}: the '
+        'Host keeps its own seat.',
       );
     }
     if (placementDurationSeconds < minimumPlacementSeconds ||
@@ -255,6 +279,8 @@ class RoomConfig {
     'maxPlayers': maxPlayers,
     'placementDurationSeconds': placementDurationSeconds,
     'turnDurationSeconds': turnDurationSeconds,
+    'botCount': botCount,
+    'botDifficulty': botDifficulty.wire,
   };
 
   /// Parses a configuration received from a client.
@@ -267,6 +293,7 @@ class RoomConfig {
     final int maxPlayers = _readInt(json, 'maxPlayers');
     final int placementSeconds = _readInt(json, 'placementDurationSeconds');
     final int turnSeconds = _readInt(json, 'turnDurationSeconds');
+    final Object? botCount = json['botCount'];
 
     return RoomConfig(
       rows: rows,
@@ -275,6 +302,9 @@ class RoomConfig {
       maxPlayers: maxPlayers,
       placementDurationSeconds: placementSeconds,
       turnDurationSeconds: turnSeconds,
+      // Optional on the wire, so a peer with an older config still parses.
+      botCount: botCount is int ? botCount : 0,
+      botDifficulty: BotDifficulty.fromWire(json['botDifficulty'] as String?),
     );
   }
 
@@ -420,9 +450,7 @@ class RoomSnapshot {
     'roomId': roomId,
     'status': status.wire,
     'config': config.toJson(),
-    'players': players
-        .map((PlayerSummary player) => player.toJson())
-        .toList(),
+    'players': players.map((PlayerSummary player) => player.toJson()).toList(),
     'viewerPlayerId': viewerPlayerId,
     'viewerIsHost': viewerIsHost,
     'stateVersion': stateVersion,

@@ -9,6 +9,7 @@ import '../../../shared/models/room_models.dart';
 import '../../profile/domain/profile.dart';
 import '../../profile/domain/profile_controller.dart';
 import '../../rooms/domain/room_session_controller.dart';
+import 'bot_labels.dart';
 
 /// Picks the strength of the computer opponent and starts a solo match.
 ///
@@ -92,9 +93,9 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: _DifficultyTile(
-                          icon: _iconFor(difficulty),
-                          title: _labelOf(l10n, difficulty),
-                          hint: _hintOf(l10n, difficulty),
+                          icon: botDifficultyIcon(difficulty),
+                          title: botDifficultyLabel(l10n, difficulty),
+                          hint: botDifficultyHint(l10n, difficulty),
                           selected: _difficulty == difficulty,
                           onTap: () => setState(() => _difficulty = difficulty),
                         ),
@@ -146,7 +147,7 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
 
   Future<void> _start(Profile profile) async {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String botName = l10n.botDisplayName(_labelOf(l10n, _difficulty));
+    final String botName = botDisplayName(l10n, _difficulty);
     await ref
         .read(roomSessionControllerProvider.notifier)
         .startPractice(
@@ -167,25 +168,6 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
     }
   }
 
-  IconData _iconFor(BotDifficulty difficulty) => switch (difficulty) {
-    BotDifficulty.easy => Icons.sentiment_satisfied_alt_outlined,
-    BotDifficulty.medium => Icons.smart_toy_outlined,
-    BotDifficulty.hard => Icons.local_fire_department_outlined,
-  };
-
-  String _labelOf(AppLocalizations l10n, BotDifficulty difficulty) =>
-      switch (difficulty) {
-        BotDifficulty.easy => l10n.difficultyEasy,
-        BotDifficulty.medium => l10n.difficultyMedium,
-        BotDifficulty.hard => l10n.difficultyHard,
-      };
-
-  String _hintOf(AppLocalizations l10n, BotDifficulty difficulty) =>
-      switch (difficulty) {
-        BotDifficulty.easy => l10n.difficultyEasyHint,
-        BotDifficulty.medium => l10n.difficultyMediumHint,
-        BotDifficulty.hard => l10n.difficultyHardHint,
-      };
 }
 
 class _DifficultyTile extends StatelessWidget {

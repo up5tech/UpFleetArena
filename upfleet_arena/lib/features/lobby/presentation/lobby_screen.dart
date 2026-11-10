@@ -7,7 +7,10 @@ import 'package:upfleet_arena/l10n/fleet_preset_label.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../game_engine/bot/bot_brain.dart';
 import '../../../shared/models/room_models.dart';
+import '../../bot/presentation/add_bot_dialog.dart';
+import '../../bot/presentation/bot_labels.dart';
 import '../../rooms/domain/room_session_controller.dart';
 
 /// The room lobby.
@@ -110,6 +113,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            if (_canAddComputer(session)) ...<Widget>[
+              _AddComputerCard(onAdd: () => _addComputer(context)),
+              const SizedBox(height: 12),
+            ],
             if (snapshot != null)
               _SettingsCard(
                 config: snapshot.config,
@@ -171,6 +178,24 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         .length;
   }
 
+  /// Whether the Host may still seat another computer opponent.
+  ///
+  /// A bot takes a real seat, so it counts against the room capacity and the
+  /// minimum number of players needed to start (PLAN.md §3.1).
+  static bool _canAddComputer(RoomSessionState session) {
+    final RoomSnapshot? snapshot = session.snapshot;
+    if (snapshot == null || !session.isHost) return false;
+    if (snapshot.status != RoomStatus.lobby) return false;
+    final int seated = snapshot.players
+        .where(
+          (PlayerSummary player) =>
+              player.status == PlayerConnectionStatus.connected ||
+              player.status == PlayerConnectionStatus.disconnected,
+        )
+        .length;
+    return seated < snapshot.config.maxPlayers;
+  }
+
   /// Follows the phase the Host moved the room into.
   void _followPhase(RoomSessionState session) {
     if (!mounted) return;
@@ -215,6 +240,24 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     await ref
         .read(roomSessionControllerProvider.notifier)
         .kick(player.playerId);
+  }
+
+  /// Seats a computer opponent chosen by the Host.
+  Future<void> _addComputer(BuildContext context) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final BotDifficulty? difficulty = await showAddBotDialog(context);
+    if (difficulty == null || !context.mounted) return;
+
+    final List<String> problems = await ref
+        .read(roomSessionControllerProvider.notifier)
+        .addBot(
+          displayName: botDisplayName(l10n, difficulty),
+          difficulty: difficulty,
+        );
+    if (!context.mounted || problems.isEmpty) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(problems.join(' '))));
   }
 
   Future<void> _closeRoom(BuildContext context) async {
@@ -409,6 +452,13 @@ class _SettingsCard extends StatelessWidget {
               label: l10n.capacity,
               value: l10n.capacityValue(config.maxPlayers),
             ),
+            if (config.botCount > 0)
+              _KeyValue(
+                label: l10n.computerOpponents,
+                value:
+                    '${config.botCount} · '
+                    '${botDifficultyLabel(l10n, config.botDifficulty)}',
+              ),
             _KeyValue(
               label: l10n.timers,
               value: l10n.timersSettingsValue(
@@ -513,6 +563,16 @@ class _PlayerRow extends StatelessWidget {
               avatar: const Icon(Icons.star, size: 16, color: AppTheme.sunk),
               visualDensity: VisualDensity.compact,
             ),
+          if (player.isBot)
+            Chip(
+              label: Text(l10n.computer),
+              avatar: const Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: AppTheme.sunk,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
           if (canKick)
             IconButton(
               tooltip: l10n.removePlayer(player.displayName),
@@ -548,6 +608,44 @@ class _PlayerRow extends StatelessWidget {
         PlayerConnectionStatus.left => Icons.logout,
         PlayerConnectionStatus.kicked => Icons.person_remove,
       };
+}
+
+class _AddComputerCard extends StatelessWidget {
+  const _AddComputerCard({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              l10n.addComputerTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.addComputerHint,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.smart_toy_outlined, size: 18),
+              label: Text(l10n.addComputer),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _HostActions extends StatelessWidget {

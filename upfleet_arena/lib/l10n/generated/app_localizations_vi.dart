@@ -211,6 +211,29 @@ class AppLocalizationsVi extends AppLocalizations {
       'Máy chơi ngay trên thiết bị này. Xếp hạm đội rồi lần lượt bắn vào nhau.';
 
   @override
+  String get addComputerTitle => 'Thêm đối thủ máy';
+
+  @override
+  String get addComputer => 'Thêm máy';
+
+  @override
+  String get addComputerHint =>
+      'Máy chiếm một chỗ như người chơi: tự xếp hạm đội và bắn vào lượt của nó. Chỉ chủ phòng thêm hoặc loại được.';
+
+  @override
+  String get computer => 'Máy';
+
+  @override
+  String get computerOpponents => 'Đối thủ máy';
+
+  @override
+  String get computerCount => 'Số máy';
+
+  @override
+  String get computerSettingsHint =>
+      'Máy vào phòng ngay khi bạn lưu và tự xếp hạm đội. Máy chiếm một chỗ của người chơi nên vẫn tính vào sức chứa phòng.';
+
+  @override
   String get lobbySubtitle => 'Người chơi, trạng thái sẵn sàng và bắt đầu trận';
 
   @override

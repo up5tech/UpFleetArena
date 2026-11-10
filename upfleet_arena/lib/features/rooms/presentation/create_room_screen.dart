@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../game_engine/bot/bot_brain.dart';
 import '../../../shared/models/room_models.dart';
+import '../../bot/presentation/bot_labels.dart';
 import '../../profile/domain/profile.dart';
 import '../../profile/domain/profile_controller.dart';
 import '../domain/room_session_controller.dart';
@@ -115,7 +117,11 @@ class CreateRoomScreen extends ConsumerWidget {
                       final RoomSessionController controller = ref.read(
                         roomSessionControllerProvider.notifier,
                       );
-                      await controller.createRoom(profile: profile);
+                      await controller.createRoom(
+                        profile: profile,
+                        botNameBuilder: (BotDifficulty difficulty) =>
+                            botDisplayName(l10n, difficulty),
+                      );
                       if (!context.mounted) return;
                       if (ref.read(roomSessionControllerProvider).isInRoom) {
                         context.go('/lobby');

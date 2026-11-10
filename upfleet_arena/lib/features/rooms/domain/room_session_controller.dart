@@ -317,6 +317,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   Future<void> createRoom({
     required Profile profile,
     RoomConfig? config,
+    String Function(BotDifficulty difficulty)? botNameBuilder,
   }) async {
     await _teardown();
 
@@ -340,7 +341,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
     final HostRoomService service = HostRoomService(
       hostService: ref.read(tcpHostServiceProvider),
-      coordinator: RoomCoordinator(),
+      coordinator: RoomCoordinator(botNameBuilder: botNameBuilder),
       advertiser: ref.read(lanAdvertiserServiceProvider),
     );
     _hostService = service;
@@ -515,6 +516,23 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     final RoomCoordinator? coordinator = _coordinator;
     if (coordinator == null) return const <String>[];
     return coordinator.hostUpdateConfig(config);
+  }
+
+  /// Seats a computer opponent in the room. Host only.
+  ///
+  /// Remote clients cannot reach this: the Host runtime verifies that the
+  /// command comes from the Host device. Returns the validation problems, or
+  /// an empty list on success.
+  Future<List<String>> addBot({
+    required String displayName,
+    required BotDifficulty difficulty,
+  }) async {
+    final RoomCoordinator? coordinator = _coordinator;
+    if (coordinator == null) return const <String>[];
+    return coordinator.hostAddBot(
+      displayName: displayName,
+      difficulty: difficulty,
+    );
   }
 
   /// Sends a fleet layout to the Host.

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,9 @@ import 'package:upfleet_arena/l10n/fleet_preset_label.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../game_engine/bot/bot_brain.dart';
 import '../../../shared/models/room_models.dart';
+import '../../bot/presentation/bot_labels.dart';
 import '../../rooms/domain/room_session_controller.dart';
 
 /// The Host-only room settings screen.
@@ -109,8 +113,13 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                       : RoomConfig.minimumPlayers,
                   max: RoomConfig.maximumPlayers,
                   enabled: isHost,
-                  onChanged: (int value) =>
-                      _edit(_draft.copyWith(maxPlayers: value)),
+                  onChanged: (int value) => _edit(
+                    _draft.copyWith(
+                      maxPlayers: value,
+                      // A computer never takes the Host seat.
+                      botCount: min(_draft.botCount, value - 1),
+                    ),
+                  ),
                 ),
                 if (seated > 0)
                   Padding(
@@ -120,6 +129,36 @@ class _HostSettingsScreenState extends ConsumerState<HostSettingsScreen> {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: l10n.computerOpponents,
+              children: <Widget>[
+                _StepperRow(
+                  label: l10n.computerCount,
+                  value: _draft.botCount,
+                  min: 0,
+                  max: _draft.maxPlayers - 1,
+                  enabled: isHost,
+                  onChanged: (int value) =>
+                      _edit(_draft.copyWith(botCount: value)),
+                ),
+                for (final BotDifficulty difficulty in BotDifficulty.values)
+                  _DifficultyOption(
+                    difficulty: difficulty,
+                    selected: _draft.botDifficulty == difficulty,
+                    enabled: isHost && _draft.botCount > 0,
+                    onTap: () =>
+                        _edit(_draft.copyWith(botDifficulty: difficulty)),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    l10n.computerSettingsHint,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -287,6 +326,61 @@ class _StepperRow extends StatelessWidget {
             icon: const Icon(Icons.add_circle_outline),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One strength option of the preset computer opponents.
+class _DifficultyOption extends StatelessWidget {
+  const _DifficultyOption({
+    required this.difficulty,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final BotDifficulty difficulty;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: enabled
+                  ? (selected ? AppTheme.accent : AppTheme.textSecondary)
+                  : AppTheme.sunk,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    botDifficultyLabel(l10n, difficulty),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: enabled ? null : AppTheme.sunk),
+                  ),
+                  Text(
+                    botDifficultyHint(l10n, difficulty),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
