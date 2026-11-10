@@ -70,7 +70,9 @@ class MatchResultScreen extends ConsumerWidget {
                       _duration(result.durationSeconds),
                       own.rank,
                     ),
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(height: 1.35),
             ),
             const SizedBox(height: 20),
             Text(l10n.finalRanking, style: Theme.of(context).textTheme.titleMedium),
@@ -103,7 +105,9 @@ class MatchResultScreen extends ConsumerWidget {
               Text(
                 l10n.matchOverClosesRoom,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(height: 1.35),
               ),
             ],
           ],

@@ -230,4 +230,48 @@ void main() {
 
     expect(controller.readyRequested, isTrue);
   });
+
+  testWidgets('a 320 px phone fits the board, actions and readiness list', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 3000);
+    tester.view.devicePixelRatio = 1;
+
+    final _FakeSessionController controller = _FakeSessionController(
+      session: RoomSessionState(
+        role: RoomRole.host,
+        status: RoomSessionStatus.inRoom,
+        snapshot: _snapshot(),
+        playerId: 'host-1',
+        placement: const PlacementState(
+          playerId: 'host-1',
+          ships: <ShipLayout>[],
+          ready: false,
+          stateVersion: 1,
+        ),
+        readiness: const ReadinessState(
+          stateVersion: 1,
+          players: <PlayerReadiness>[
+            PlayerReadiness(
+              playerId: 'host-1',
+              displayName: 'Host',
+              ready: true,
+            ),
+            PlayerReadiness(
+              playerId: 'player-2',
+              displayName: 'A rather long guest name',
+              ready: false,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(_app(controller));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('A rather long guest name'), findsOneWidget);
+    // The board still has room for every cell on a narrow screen.
+    expect(tester.getRect(find.byType(BoardCanvas)).width, greaterThan(240));
+  });
 }

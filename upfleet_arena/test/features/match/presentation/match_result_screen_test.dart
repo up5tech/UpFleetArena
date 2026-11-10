@@ -241,4 +241,72 @@ void main() {
     expect(find.text('The match has not finished yet.'), findsOneWidget);
     expect(find.text('Final ranking'), findsNothing);
   });
+
+  testWidgets('long names and stats fit a 320 px phone', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 3000);
+    tester.view.devicePixelRatio = 1;
+
+    const MatchResult longResult = MatchResult(
+      matchId: 'match-2',
+      stateVersion: 7,
+      winnerPlayerId: 'player-1',
+      winnerDisplayName: 'A rather long winner name',
+      durationSeconds: 3725,
+      ranking: <PlayerResultView>[
+        PlayerResultView(
+          playerId: 'player-1',
+          displayName: 'A rather long winner name',
+          rank: 1,
+          shots: 118,
+          hits: 11,
+          misses: 107,
+          shipsSunk: 5,
+          timeouts: 0,
+        ),
+        PlayerResultView(
+          playerId: 'player-2',
+          displayName: 'Bob',
+          rank: 2,
+          shots: 14,
+          hits: 8,
+          misses: 6,
+          shipsSunk: 3,
+          timeouts: 12,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: RoomSessionState(
+            role: RoomRole.client,
+            status: RoomSessionStatus.inRoom,
+            playerId: 'player-1',
+            snapshot: const RoomSnapshot(
+              roomId: 'room-1',
+              status: RoomStatus.finished,
+              config: RoomConfig.defaults,
+              players: <PlayerSummary>[],
+              viewerPlayerId: 'player-1',
+              viewerIsHost: false,
+              stateVersion: 7,
+            ),
+            matchResult: longResult,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('A rather long winner name (you)'), findsOneWidget);
+    final Rect stats = tester.getRect(
+      find.text('118 shots · 11 hits · 107 misses · 5 sunk · 0 timeouts'),
+    );
+    // The statistics keep the width of the card instead of a thin column.
+    expect(stats.width, greaterThan(180));
+  });
 }
