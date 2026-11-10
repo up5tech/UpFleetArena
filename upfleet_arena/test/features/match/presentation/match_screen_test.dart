@@ -183,6 +183,10 @@ void main() {
     expect(find.text('Turn 3 · 22s left'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
     expect(find.byType(BattleBoard), findsOneWidget);
+    // The own fleet shares the battle view instead of a second tab.
+    expect(find.text('Your board'), findsNothing);
+    expect(find.text('Your fleet'), findsOneWidget);
+    expect(find.byType(BoardCanvas), findsOneWidget);
   });
 
   testWidgets('firing sends the shot of the picked cell', (
@@ -358,7 +362,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Your board'));
+    // The sunk fleet is still there, below the spectator feed.
+    await tester.dragUntilVisible(
+      find.text('Your fleet'),
+      find.byType(ListView).first,
+      const Offset(0, -200),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Your fleet'), findsOneWidget);

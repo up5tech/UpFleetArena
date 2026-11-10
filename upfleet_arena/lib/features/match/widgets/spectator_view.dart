@@ -16,10 +16,14 @@ class SpectatorView extends StatelessWidget {
     super.key,
     required this.snapshot,
     required this.session,
+    this.footer,
   });
 
   final MatchSnapshot snapshot;
   final RoomSessionState session;
+
+  /// Extra content appended below the feed, e.g. the player's own fleet.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +172,10 @@ class SpectatorView extends StatelessWidget {
           l10n.spectatorHint,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.35),
         ),
+        if (footer case final Widget extra) ...<Widget>[
+          const SizedBox(height: 24),
+          extra,
+        ],
       ],
     );
   }

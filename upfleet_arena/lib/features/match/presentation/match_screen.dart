@@ -114,7 +114,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       final int index = _tabs?.index ?? 0;
       _tabs?.dispose();
       _tabs = TabController(
-        length: 3,
+        length: 2,
         vsync: this,
         initialIndex: index,
         animationDuration: reducedMotion
@@ -147,7 +147,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
           controller: tabs,
           tabs: <Widget>[
             Tab(text: spectating ? l10n.spectating : l10n.battle),
-            Tab(text: l10n.yourBoard),
             Tab(text: l10n.players),
           ],
         ),
@@ -157,7 +156,14 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
           controller: tabs,
           children: <Widget>[
             if (spectating)
-              SpectatorView(snapshot: snapshot, session: session)
+              SpectatorView(
+                snapshot: snapshot,
+                session: session,
+                footer: _OwnFleetSection(
+                  snapshot: snapshot,
+                  session: session,
+                ),
+              )
             else
               _BattleTab(
                 snapshot: snapshot,
@@ -180,7 +186,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
                   if (targetId != null) unawaited(_fire(targetId));
                 },
               ),
-            _OwnBoardTab(snapshot: snapshot, session: session),
             _PlayersTab(snapshot: snapshot, session: session),
           ],
         ),
@@ -406,6 +411,10 @@ class _BattleTab extends StatelessWidget {
                   : l10n.waitForYourTurn,
             ),
           ),
+        // The own fleet is part of the battle view: the player reads both
+        // boards in one scroll instead of switching tabs.
+        const SizedBox(height: 24),
+        _OwnFleetSection(snapshot: snapshot, session: session),
       ],
     );
   }
@@ -426,8 +435,9 @@ class _BattleTab extends StatelessWidget {
   }
 }
 
-class _OwnBoardTab extends StatelessWidget {
-  const _OwnBoardTab({required this.snapshot, required this.session});
+/// The viewer's own fleet, embedded in the battle view.
+class _OwnFleetSection extends StatelessWidget {
+  const _OwnFleetSection({required this.snapshot, required this.session});
 
   final MatchSnapshot snapshot;
   final RoomSessionState session;
@@ -439,8 +449,8 @@ class _OwnBoardTab extends StatelessWidget {
     final int rows = session.snapshot?.config.rows ?? 10;
     final int columns = session.snapshot?.config.columns ?? 10;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(l10n.yourFleet, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
