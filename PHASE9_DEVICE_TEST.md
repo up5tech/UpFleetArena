@@ -69,11 +69,25 @@
 
 ## 5. Release candidate checklist
 
-- [ ] `flutter analyze` clean
-- [ ] `flutter test` green
-- [ ] Android release build succeeds
-- [ ] iOS release build succeeds
-- [ ] Store privacy disclosures mention local-network access
-- [ ] No backend, cloud service or Internet dependency introduced
-- [ ] `AppConfig.hostMigration == false`
-- [ ] `AppConfig.hostReconnectSupported == false`
+- [x] `flutter analyze` clean
+- [x] `flutter test` green (195 tests)
+- [x] Android release build succeeds — `build/app/outputs/flutter-apk/app-release.apk`,
+      56.3 MB, universal (arm64-v8a, armeabi-v7a, x86_64), target SDK 36,
+      not debuggable
+- [x] iOS release build succeeds — `build/ios/iphoneos/Runner.app`, 19.4 MB,
+      arm64 device slice, built with `--no-codesign`
+- [ ] Store privacy disclosures mention local-network access — the code side is
+      in place (`NSLocalNetworkUsageDescription` / `NSBonjourServices` on iOS,
+      `ACCESS_LOCAL_NETWORK` on Android); the store listing itself is external
+- [x] No backend, cloud service or Internet dependency introduced
+- [x] `AppConfig.hostMigration == false`
+- [x] `AppConfig.hostReconnectSupported == false`
+
+Builds verified locally with Flutter 3.47.8 and Xcode 26.1.1. Two caveats for
+this checklist:
+
+- The Android APK is signed with the **debug keystore**
+  (`android/app/build.gradle.kts`), so it installs and runs but is not
+  upload-ready; a release keystore must be configured before a store upload.
+- The builds only prove compilation and packaging. The physical-device matrix
+  in sections 1–4 above still requires 2–6 real devices.
