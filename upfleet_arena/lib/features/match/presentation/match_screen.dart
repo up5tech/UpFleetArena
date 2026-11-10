@@ -17,6 +17,9 @@ import '../../rooms/domain/room_session_controller.dart';
 import '../widgets/battle_board.dart';
 import '../widgets/spectator_view.dart';
 
+/// From this width the match uses side-by-side columns instead of tabs.
+const double _wideLayoutWidth = 720;
+
 /// The screen of a running match.
 ///
 /// It shows whose turn it is, the board of the selected opponent and the
@@ -107,16 +110,23 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       }
     });
 
+    // Wide screens show the players next to the boards, so the tabs (and the
+    // tab transition) disappear entirely.
+    final bool wide =
+        MediaQuery.sizeOf(context).width >= _wideLayoutWidth;
+
     // Reduced motion shortens the tab transition to zero (PLAN.md §5.5).
     final FeedbackSettings settings = ref.watch(feedbackSettingsProvider);
     final bool reducedMotion = useReducedMotion(context, settings);
-    if (_tabs == null || _tabsReducedMotion != reducedMotion) {
+    if (_tabs == null ||
+        _tabsReducedMotion != reducedMotion ||
+        _tabs!.length != (wide ? 1 : 2)) {
       final int index = _tabs?.index ?? 0;
       _tabs?.dispose();
       _tabs = TabController(
-        length: 2,
+        length: wide ? 1 : 2,
         vsync: this,
-        initialIndex: index,
+        initialIndex: wide ? 0 : (index == 1 ? 1 : 0),
         animationDuration: reducedMotion
             ? Duration.zero
             : const Duration(milliseconds: 250),
@@ -140,55 +150,69 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _followPhase(session));
 
+    final Widget ownFleet = _OwnFleetSection(
+      snapshot: snapshot,
+      session: session,
+    );
+    final Widget players = _PlayersSection(
+      snapshot: snapshot,
+      session: session,
+    );
+    final Widget mainView = spectating
+        ? SpectatorView(
+            snapshot: snapshot,
+            session: session,
+            footer: ownFleet,
+          )
+        : _BattleTab(
+            snapshot: snapshot,
+            session: session,
+            isMyTurn: isMyTurn,
+            remaining: remaining,
+            selectedTargetId: targetId,
+            selectedCell: _selectedCell,
+            reducedMotion: reducedMotion,
+            sidePanel: wide ? players : null,
+            onTargetSelected: (String targetId) {
+              setState(() {
+                _selectedTargetId = targetId;
+                _selectedCell = null;
+              });
+            },
+            onCellTapped: (CellCoord cell) {
+              setState(() => _selectedCell = cell);
+            },
+            onFire: () {
+              if (targetId != null) unawaited(_fire(targetId));
+            },
+          );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.theMatch),
-        bottom: TabBar(
-          controller: tabs,
-          tabs: <Widget>[
-            Tab(text: spectating ? l10n.spectating : l10n.battle),
-            Tab(text: l10n.players),
-          ],
-        ),
+        bottom: wide
+            ? null
+            : TabBar(
+                controller: tabs,
+                tabs: <Widget>[
+                  Tab(text: spectating ? l10n.spectating : l10n.battle),
+                  Tab(text: l10n.players),
+                ],
+              ),
       ),
       body: SafeArea(
-        child: TabBarView(
-          controller: tabs,
-          children: <Widget>[
-            if (spectating)
-              SpectatorView(
-                snapshot: snapshot,
-                session: session,
-                footer: _OwnFleetSection(
-                  snapshot: snapshot,
-                  session: session,
-                ),
-              )
-            else
-              _BattleTab(
-                snapshot: snapshot,
-                session: session,
-                isMyTurn: isMyTurn,
-                remaining: remaining,
-                selectedTargetId: targetId,
-                selectedCell: _selectedCell,
-                reducedMotion: reducedMotion,
-                onTargetSelected: (String targetId) {
-                  setState(() {
-                    _selectedTargetId = targetId;
-                    _selectedCell = null;
-                  });
-                },
-                onCellTapped: (CellCoord cell) {
-                  setState(() => _selectedCell = cell);
-                },
-                onFire: () {
-                  if (targetId != null) unawaited(_fire(targetId));
-                },
+        child: wide
+            ? mainView
+            : TabBarView(
+                controller: tabs,
+                children: <Widget>[
+                  mainView,
+                  ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: <Widget>[players],
+                  ),
+                ],
               ),
-            _PlayersTab(snapshot: snapshot, session: session),
-          ],
-        ),
       ),
     );
   }
@@ -247,9 +271,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
 }
 
 class _BattleTab extends StatelessWidget {
-  /// Below this width the two fleets stack instead of sitting side by side.
-  static const double _sideBySideWidth = 720;
-
   const _BattleTab({
     required this.snapshot,
     required this.session,
@@ -258,6 +279,7 @@ class _BattleTab extends StatelessWidget {
     required this.selectedTargetId,
     required this.selectedCell,
     required this.reducedMotion,
+    this.sidePanel,
     required this.onTargetSelected,
     required this.onCellTapped,
     required this.onFire,
@@ -270,6 +292,10 @@ class _BattleTab extends StatelessWidget {
   final String? selectedTargetId;
   final CellCoord? selectedCell;
   final bool reducedMotion;
+
+  /// Extra column shown next to the fleets, e.g. the player list.
+  final Widget? sidePanel;
+
   final ValueChanged<String> onTargetSelected;
   final ValueChanged<CellCoord> onCellTapped;
   final VoidCallback onFire;
@@ -428,7 +454,7 @@ class _BattleTab extends StatelessWidget {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // Wide screens show both fleets at once instead of one below the other.
-        final bool sideBySide = constraints.maxWidth >= _sideBySideWidth;
+        final bool sideBySide = constraints.maxWidth >= _wideLayoutWidth;
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
@@ -439,13 +465,28 @@ class _BattleTab extends StatelessWidget {
                 children: <Widget>[
                   Expanded(child: attack),
                   const SizedBox(width: 16),
-                  Expanded(child: ownFleet),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        ownFleet,
+                        if (sidePanel case final Widget panel) ...<Widget>[
+                          const SizedBox(height: 24),
+                          panel,
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               )
             else ...<Widget>[
               attack,
               const SizedBox(height: 24),
               ownFleet,
+              if (sidePanel case final Widget panel) ...<Widget>[
+                const SizedBox(height: 24),
+                panel,
+              ],
             ],
           ],
         );
@@ -541,8 +582,12 @@ class _OwnFleetSection extends StatelessWidget {
   }
 }
 
-class _PlayersTab extends StatelessWidget {
-  const _PlayersTab({required this.snapshot, required this.session});
+/// The turn order and the state of every player.
+///
+/// One line per player keeps the list short enough to sit next to the boards
+/// on a wide screen.
+class _PlayersSection extends StatelessWidget {
+  const _PlayersSection({required this.snapshot, required this.session});
 
   final MatchSnapshot snapshot;
   final RoomSessionState session;
@@ -550,63 +595,105 @@ class _PlayersTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+    final TextTheme text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(l10n.turnOrder, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        Text(l10n.turnOrder, style: text.titleMedium),
+        const SizedBox(height: 6),
         for (final MatchPlayerView player in snapshot.players)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        player.playerId == session.playerId
-                            ? l10n.playerNameYou(player.displayName)
-                            : player.displayName,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: player.playerId == snapshot.activePlayerId
-                              ? FontWeight.w700
-                              : null,
-                        ),
-                      ),
-                      Text(
-                        l10n.shipsLeftCount(player.shipsRemaining),
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                ),
-                if (player.timeouts > 0)
-                  Text(
-                    l10n.timeoutsCount(player.timeouts),
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                const SizedBox(width: 8),
-                Icon(
-                  player.alive ? Icons.circle : Icons.person_off,
-                  size: 14,
-                  color: player.alive
-                      ? AppTheme.accent
-                      : AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  player.alive ? l10n.inTheMatch : l10n.eliminated,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: player.alive
-                        ? AppTheme.accent
-                        : AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+          _PlayerRow(
+            player: player,
+            isViewer: player.playerId == session.playerId,
+            isActive: player.playerId == snapshot.activePlayerId,
+            // Only the player whose turn it is carries the clock.
+            remaining:
+                player.playerId == snapshot.activePlayerId &&
+                    snapshot.winnerPlayerId == null
+                ? session.turnCountdown?.remaining
+                : null,
           ),
       ],
+    );
+  }
+}
+
+/// One compact line of the player list.
+class _PlayerRow extends StatelessWidget {
+  const _PlayerRow({
+    required this.player,
+    required this.isViewer,
+    required this.isActive,
+    this.remaining,
+  });
+
+  final MatchPlayerView player;
+  final bool isViewer;
+  final bool isActive;
+
+  /// Seconds left in the turn, when this is the player whose turn it is.
+  final int? remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final TextTheme text = Theme.of(context).textTheme;
+    final Color status = player.alive ? AppTheme.accent : AppTheme.textSecondary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: <Widget>[
+          // The status keeps a text label for screen readers even though the
+          // line itself only shows the coloured dot.
+          Tooltip(
+            message: player.alive ? l10n.inTheMatch : l10n.eliminated,
+            child: Icon(
+              player.alive ? Icons.circle : Icons.person_off,
+              size: 10,
+              color: status,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isViewer
+                  ? l10n.playerNameYou(player.displayName)
+                  : player.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.bodyMedium?.copyWith(
+                fontWeight: isActive ? FontWeight.w700 : null,
+                color: player.alive ? null : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          if (remaining case final int seconds) ...<Widget>[
+            const SizedBox(width: 8),
+            Icon(Icons.hourglass_bottom, size: 12, color: AppTheme.accent),
+            const SizedBox(width: 2),
+            Text(
+              l10n.secondsShort(seconds),
+              style: text.labelSmall?.copyWith(
+                color: AppTheme.accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          Text(
+            l10n.shipsLeftCount(player.shipsRemaining),
+            style: text.labelSmall?.copyWith(color: status),
+          ),
+          if (player.timeouts > 0) ...<Widget>[
+            const SizedBox(width: 6),
+            Text(
+              l10n.timeoutsCount(player.timeouts),
+              style: text.labelSmall?.copyWith(color: AppTheme.sunk),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

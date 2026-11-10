@@ -133,6 +133,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String secondsShort(int seconds) {
+    return '${seconds}s';
+  }
+
+  @override
   String turnLabelWithTime(int turn, int seconds) {
     return 'Turn $turn · ${seconds}s left';
   }

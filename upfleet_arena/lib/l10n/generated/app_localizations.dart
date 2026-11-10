@@ -320,6 +320,12 @@ abstract class AppLocalizations {
   /// **'Turn {turn}'**
   String turnLabel(int turn);
 
+  /// No description provided for @secondsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds}s'**
+  String secondsShort(int seconds);
+
   /// No description provided for @turnLabelWithTime.
   ///
   /// In en, this message translates to:

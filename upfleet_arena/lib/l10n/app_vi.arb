@@ -39,6 +39,12 @@
   "playerNameYou": "{name} (bạn)",
   "playerIsShooting": "{name} đang bắn",
   "turnLabel": "Lượt {turn}",
+  "secondsShort": "{seconds}s",
+  "@secondsShort": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "turnLabelWithTime": "Lượt {turn} · còn {seconds}s",
 
   "lanOnlyNoBackend": "Chỉ LAN · không máy chủ",

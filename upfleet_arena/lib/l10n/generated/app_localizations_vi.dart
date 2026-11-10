@@ -133,6 +133,11 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String secondsShort(int seconds) {
+    return '${seconds}s';
+  }
+
+  @override
   String turnLabelWithTime(int turn, int seconds) {
     return 'Lượt $turn · còn ${seconds}s';
   }

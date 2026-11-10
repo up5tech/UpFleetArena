@@ -69,6 +69,12 @@
       "turn": { "type": "int" }
     }
   },
+  "secondsShort": "{seconds}s",
+  "@secondsShort": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
   "turnLabelWithTime": "Turn {turn} · {seconds}s left",
   "@turnLabelWithTime": {
     "placeholders": {

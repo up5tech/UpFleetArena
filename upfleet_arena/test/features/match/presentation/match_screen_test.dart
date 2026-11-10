@@ -184,10 +184,11 @@ void main() {
 
     expect(find.text('Your turn'), findsOneWidget);
     expect(find.text('Turn 3 · 22s left'), findsOneWidget);
-    expect(find.text('Bob'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Bob'), findsOneWidget);
     expect(find.byType(BattleBoard), findsOneWidget);
     // The own fleet shares the battle view instead of a second tab.
     expect(find.text('Your board'), findsNothing);
+    expect(find.byType(TabBar), findsNothing);
     expect(find.text('Your fleet'), findsOneWidget);
     expect(find.byType(BoardCanvas), findsOneWidget);
   });
@@ -229,7 +230,7 @@ void main() {
     );
     await tester.pumpWidget(_app(controller));
 
-    await tester.tap(find.text('Bob'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Bob'));
     await tester.pump();
 
     final Rect board = tester.getRect(find.byType(BattleBoard));
@@ -282,7 +283,7 @@ void main() {
     expect(find.text('Your shot hit a ship.'), findsOneWidget);
   });
 
-  testWidgets('the players tab shows the turn order and the timeouts', (
+  testWidgets('a wide screen lists the players beside the boards', (
     WidgetTester tester,
   ) async {
     final _FakeSessionController controller = _FakeSessionController(
@@ -290,13 +291,59 @@ void main() {
     );
     await tester.pumpWidget(_app(controller));
 
+    // No tabs on a wide screen: the roster is part of the same scroll.
+    expect(find.byType(TabBar), findsNothing);
+    expect(find.text('Players'), findsNothing);
+    expect(find.text('Turn order'), findsOneWidget);
+    expect(find.text('Alice (you)'), findsOneWidget);
+    expect(find.text('1 timeouts'), findsOneWidget);
+    expect(find.byTooltip('In the match'), findsNWidgets(2));
+    expect(find.text('3 ships left'), findsOneWidget);
+
+    // Only the player whose turn it is carries the countdown.
+    expect(find.text('22s'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find
+            .ancestor(of: find.text('Alice (you)'), matching: find.byType(Row))
+            .first,
+        matching: find.text('22s'),
+      ),
+      findsOneWidget,
+    );
+
+    // One line per player keeps the column short next to the boards.
+    final Size row = tester.getSize(
+      find
+          .ancestor(of: find.text('Alice (you)'), matching: find.byType(Row))
+          .first,
+    );
+    expect(row.height, lessThan(34));
+
+    // The roster sits in the second column, beside the attack board.
+    final Rect attack = tester.getRect(find.byType(BattleBoard));
+    final Rect roster = tester.getRect(find.text('Turn order'));
+    expect(roster.left, greaterThan(attack.right));
+  });
+
+  testWidgets('a narrow screen keeps the players in a tab', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session())),
+    );
+    await tester.pump();
+
+    expect(find.byType(TabBar), findsOneWidget);
     await tester.tap(find.text('Players'));
     await tester.pumpAndSettle();
 
     expect(find.text('Alice (you)'), findsOneWidget);
     expect(find.text('1 timeouts'), findsOneWidget);
-    expect(find.text('In the match'), findsNWidgets(2));
-    expect(find.text('3 ships left'), findsOneWidget);
   });
 
   testWidgets('an eliminated player spectates instead of fighting', (
@@ -307,7 +354,8 @@ void main() {
     );
     await tester.pumpWidget(_app(controller));
 
-    expect(find.text('Spectating'), findsOneWidget);
+    // Wide screen: the spectator view replaces the battle view, with no tabs.
+    expect(find.byType(TabBar), findsNothing);
     expect(find.text('Battle'), findsNothing);
     expect(find.byType(SpectatorView), findsOneWidget);
     expect(find.byType(BattleBoard), findsNothing);
