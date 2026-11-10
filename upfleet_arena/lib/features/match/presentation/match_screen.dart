@@ -669,6 +669,44 @@ class _PlayerRow extends StatelessWidget {
     final TextTheme text = Theme.of(context).textTheme;
     final Color status = player.alive ? AppTheme.accent : AppTheme.textSecondary;
     final bool urgent = isUrgentTurn(remaining);
+    final bool narrow =
+        MediaQuery.sizeOf(context).width < _wideLayoutWidth;
+    final Widget meta = Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 2,
+      children: <Widget>[
+        if (remaining case final int seconds)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                urgent ? Icons.timer_outlined : Icons.hourglass_bottom,
+                size: 12,
+                color: urgent ? AppTheme.danger : AppTheme.accent,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                l10n.secondsShort(seconds),
+                style: text.labelSmall?.copyWith(
+                  color: urgent ? AppTheme.danger : AppTheme.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        Text(
+          l10n.shipsLeftCount(player.shipsRemaining),
+          style: text.labelSmall?.copyWith(color: status),
+        ),
+        if (player.timeouts > 0)
+          Text(
+            l10n.timeoutsCount(player.timeouts),
+            style: text.labelSmall?.copyWith(color: AppTheme.sunk),
+          ),
+      ],
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 1),
@@ -705,34 +743,16 @@ class _PlayerRow extends StatelessWidget {
               ),
             ),
           ),
-          if (remaining case final int seconds) ...<Widget>[
-            const SizedBox(width: 8),
-            Icon(
-              urgent ? Icons.timer_outlined : Icons.hourglass_bottom,
-              size: 12,
-              color: urgent ? AppTheme.danger : AppTheme.accent,
-            ),
-            const SizedBox(width: 2),
-            Text(
-              l10n.secondsShort(seconds),
-              style: text.labelSmall?.copyWith(
-                color: urgent ? AppTheme.danger : AppTheme.accent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
           const SizedBox(width: 8),
-          Text(
-            l10n.shipsLeftCount(player.shipsRemaining),
-            style: text.labelSmall?.copyWith(color: status),
-          ),
-          if (player.timeouts > 0) ...<Widget>[
-            const SizedBox(width: 6),
-            Text(
-              l10n.timeoutsCount(player.timeouts),
-              style: text.labelSmall?.copyWith(color: AppTheme.sunk),
-            ),
-          ],
+          narrow
+              // In the tabbed layout the row shares 288 px with the name, so
+              // the clock, ships and timeouts move to a second line instead
+              // of pushing the row past the edge.
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 168),
+                  child: meta,
+                )
+              : meta,
         ],
       ),
     );

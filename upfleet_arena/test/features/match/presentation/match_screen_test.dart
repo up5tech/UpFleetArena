@@ -235,6 +235,36 @@ void main() {
     expect(own.top, greaterThan(attack.bottom));
   });
 
+  for (final double scale in <double>[1, 1.3]) {
+    testWidgets('a 320 px phone keeps the player rows inside the panel '
+        'at ${scale}x text', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 3000);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.reset);
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+
+      await tester.pumpWidget(
+        _app(_FakeSessionController(session: _session(turnSeconds: 4))),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Players'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The clock, ships and timeouts move to a second line instead of
+      // overflowing the panel.
+      expect(tester.takeException(), isNull);
+      expect(find.text('Turn order'), findsOneWidget);
+      expect(find.text('3 ships left'), findsOneWidget);
+      expect(find.text('1 timeouts'), findsOneWidget);
+    });
+  }
+
   testWidgets('firing sends the shot of the picked cell', (
     WidgetTester tester,
   ) async {
@@ -460,6 +490,28 @@ void main() {
 
     expect(find.text('Alice (you)'), findsOneWidget);
     expect(find.text('1 timeouts'), findsOneWidget);
+  });
+
+  testWidgets('the spectator view fits a 320 px phone', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(myTurn: false, eliminated: true, turnSeconds: 4),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SpectatorView), findsOneWidget);
+    final Rect status = tester.getRect(find.text('Bob is shooting'));
+    expect(status.right, lessThanOrEqualTo(320));
   });
 
   testWidgets('an eliminated player spectates instead of fighting', (
