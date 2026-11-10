@@ -327,7 +327,7 @@
   "youWillLeaveMatch": "You will leave this match.",
   "target": "Target",
   "noTargetsLeft": "There is nobody left to shoot at.",
-  "boardLegend": "Dot: miss · Filled dot: hit · Ring: sunk",
+  "boardLegend": "Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk",
   "selectedCell": "Selected: {cell}",
   "@selectedCell": {
     "placeholders": {
@@ -341,7 +341,7 @@
     }
   },
   "waitingForHost": "Waiting for host…",
-  "fireAtThisCell": "Fire at this cell",
+  "doubleTapToFire": "Double-tap a cell to fire at it.",
   "waitForYourTurn": "Wait for your turn",
   "yourTurn": "Your turn",
   "activityMissed": "{attacker} missed {target}.",
@@ -432,7 +432,7 @@
   "noPublicShots": "No public shots yet.",
   "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.",
 
-  "targetBoardSemantics": "Target board, {rows} rows by {columns} columns. Tap a cell to select it.",
+  "targetBoardSemantics": "Target board, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.",
   "@targetBoardSemantics": {
     "placeholders": {
       "rows": { "type": "int" },

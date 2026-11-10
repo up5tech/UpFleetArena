@@ -6,20 +6,26 @@ import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../game_engine/board/board.dart';
 import '../../../game_engine/combat/combat.dart';
+import '../../../game_engine/placement/placement.dart';
 import '../../../shared/models/match_models.dart';
 
 /// The board of an opponent, as the shooter sees it.
 ///
 /// The cells that were not fired at stay empty: the shooter never learns
-/// where the ships are (PLAN.md §2.2).
+/// where the ships are (PLAN.md §2.2). The viewer's own fleet is drawn
+/// underneath, faded, so one board carries both the shot map and the fleet
+/// the viewer has to protect.
 class BattleBoard extends StatelessWidget {
   const BattleBoard({
     super.key,
     required this.rows,
     required this.columns,
     required this.shots,
+    this.ownShips = const <ShipPlacement>[],
+    this.ownSunkShips = const <String>{},
     this.selectedCell,
     this.onCellTapped,
+    this.onCellDoubleTapped,
     this.enabled = true,
   });
 
@@ -32,11 +38,20 @@ class BattleBoard extends StatelessWidget {
   /// The shots the shooter already fired.
   final List<ShotView> shots;
 
+  /// The viewer's own fleet, drawn faded under the shots.
+  final List<ShipPlacement> ownShips;
+
+  /// The viewer's ships that were sunk.
+  final Set<String> ownSunkShips;
+
   /// The cell the shooter picked.
   final CellCoord? selectedCell;
 
   /// Called when the shooter taps a cell.
   final void Function(CellCoord cell)? onCellTapped;
+
+  /// Called when the shooter double-taps a cell, i.e. fires at it.
+  final void Function(CellCoord cell)? onCellDoubleTapped;
 
   /// Whether the board accepts input.
   final bool enabled;
@@ -80,11 +95,25 @@ class BattleBoard extends StatelessWidget {
                         if (cell != null) onCellTapped?.call(cell);
                       }
                     : null,
+                onDoubleTapDown: enabled && onCellDoubleTapped != null
+                    ? (TapDownDetails details) {
+                        final CellCoord? cell = cellAt(details.localPosition);
+                        if (cell != null) {
+                          onCellTapped?.call(cell);
+                          onCellDoubleTapped!(cell);
+                        }
+                      }
+                    : null,
+                onDoubleTap: enabled && onCellDoubleTapped != null
+                    ? () {}
+                    : null,
                 child: CustomPaint(
                   painter: BattleBoardPainter(
                     rows: rows,
                     columns: columns,
                     shots: shots,
+                    ownShips: ownShips,
+                    ownSunkShips: ownSunkShips,
                     selectedCell: selectedCell,
                   ),
                 ),
@@ -103,6 +132,8 @@ class BattleBoardPainter extends CustomPainter {
     required this.rows,
     required this.columns,
     required this.shots,
+    this.ownShips = const <ShipPlacement>[],
+    this.ownSunkShips = const <String>{},
     this.selectedCell,
   });
 
@@ -114,6 +145,12 @@ class BattleBoardPainter extends CustomPainter {
 
   /// The shots the shooter already fired.
   final List<ShotView> shots;
+
+  /// The viewer's own fleet, drawn faded under the shots.
+  final List<ShipPlacement> ownShips;
+
+  /// The viewer's ships that were sunk.
+  final Set<String> ownSunkShips;
 
   /// The cell the shooter picked.
   final CellCoord? selectedCell;
@@ -163,6 +200,35 @@ class BattleBoardPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
+
+    // The own fleet stays visible but never competes with the shot markers.
+    for (final ShipPlacement ship in ownShips) {
+      final List<CellCoord> cells = ship.cells;
+      if (cells.isEmpty) continue;
+      final Rect hull = Rect.fromLTRB(
+        offsetX + cells.first.column * cellSize,
+        offsetY + cells.first.row * cellSize,
+        offsetX + (cells.last.column + 1) * cellSize,
+        offsetY + (cells.last.row + 1) * cellSize,
+      );
+      final RRect shape = RRect.fromRectAndRadius(
+        hull.deflate(2),
+        Radius.circular(math.min(8, cellSize * 0.2)),
+      );
+      final bool sunk = ownSunkShips.contains(ship.shipId);
+      final Color color = sunk ? AppTheme.sunk : AppTheme.accent;
+      canvas.drawRRect(
+        shape,
+        Paint()..color = color.withValues(alpha: 0.12),
+      );
+      canvas.drawRRect(
+        shape,
+        Paint()
+          ..color = color.withValues(alpha: 0.38)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
 
     for (final ShotView shot in shots) {
       final Offset center = Offset(
@@ -219,5 +285,7 @@ class BattleBoardPainter extends CustomPainter {
       oldDelegate.rows != rows ||
       oldDelegate.columns != columns ||
       oldDelegate.shots != shots ||
+      oldDelegate.ownShips != ownShips ||
+      oldDelegate.ownSunkShips != ownSunkShips ||
       oldDelegate.selectedCell != selectedCell;
 }

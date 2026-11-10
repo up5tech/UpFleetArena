@@ -206,11 +206,11 @@
   "youWillLeaveMatch": "Bạn sẽ rời trận đấu này.",
   "target": "Mục tiêu",
   "noTargetsLeft": "Không còn ai để bắn.",
-  "boardLegend": "Chấm: trượt · Chấm đầy: trúng · Vòng: chìm",
+  "boardLegend": "Tàu mờ: hạm đội của bạn · Chấm: trượt · Chấm đầy: trúng · Vòng: chìm",
   "selectedCell": "Đã chọn: {cell}",
   "selectedCellAlreadyFired": "Đã chọn: {cell} — đã bắn vào đây",
   "waitingForHost": "Đang chờ chủ phòng…",
-  "fireAtThisCell": "Bắn vào ô này",
+  "doubleTapToFire": "Nhấn đúp vào một ô để bắn.",
   "waitForYourTurn": "Chờ đến lượt bạn",
   "yourTurn": "Lượt của bạn",
   "activityMissed": "{attacker} bắn trượt {target}.",
@@ -252,6 +252,6 @@
   "noPublicShots": "Chưa có phát bắn công khai nào.",
   "spectatorHint": "Người xem không thấy tọa độ và không thấy hạm đội đối phương. Bàn của bạn vẫn khả dụng ở tab kế tiếp.",
 
-  "targetBoardSemantics": "Bàn mục tiêu, {rows} hàng và {columns} cột. Chạm một ô để chọn.",
+  "targetBoardSemantics": "Bàn mục tiêu, {rows} hàng và {columns} cột. Chạm một ô để chọn, nhấn đúp để bắn.",
   "ownBoardSemantics": "Bàn của bạn, {rows} hàng và {columns} cột."
 }

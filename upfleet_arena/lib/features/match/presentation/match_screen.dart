@@ -35,7 +35,6 @@ class MatchScreen extends ConsumerStatefulWidget {
 class _MatchScreenState extends ConsumerState<MatchScreen>
     with SingleTickerProviderStateMixin {
   TabController? _tabs;
-  bool? _tabsReducedMotion;
   String? _selectedTargetId;
   CellCoord? _selectedCell;
   Timer? _ticker;
@@ -116,30 +115,11 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       }
     });
 
-    // Wide screens show the players next to the boards, so the tabs (and the
-    // tab transition) disappear entirely.
-    final bool wide =
-        MediaQuery.sizeOf(context).width >= _wideLayoutWidth;
-
-    // Reduced motion shortens the tab transition to zero (PLAN.md §5.5).
+    // The match no longer uses tabs: the player list is always part of the
+    // same scroll (beside the boards on wide screens, below them on narrow
+    // ones), so it stays reachable without switching views.
     final FeedbackSettings settings = ref.watch(feedbackSettingsProvider);
     final bool reducedMotion = useReducedMotion(context, settings);
-    if (_tabs == null ||
-        _tabsReducedMotion != reducedMotion ||
-        _tabs!.length != (wide ? 1 : 2)) {
-      final int index = _tabs?.index ?? 0;
-      _tabs?.dispose();
-      _tabs = TabController(
-        length: wide ? 1 : 2,
-        vsync: this,
-        initialIndex: wide ? 0 : (index == 1 ? 1 : 0),
-        animationDuration: reducedMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 250),
-      );
-      _tabsReducedMotion = reducedMotion;
-    }
-    final TabController tabs = _tabs!;
     final bool isMyTurn =
         session.isInRoom &&
         snapshot.winnerPlayerId == null &&
@@ -182,7 +162,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
             selectedTargetId: targetId,
             selectedCell: _selectedCell,
             reducedMotion: reducedMotion,
-            sidePanel: wide ? players : null,
+            sidePanel: players,
             onTargetSelected: (String targetId) {
               setState(() {
                 _selectedTargetId = targetId;
@@ -192,38 +172,14 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
             onCellTapped: (CellCoord cell) {
               setState(() => _selectedCell = cell);
             },
-            onFire: () {
-              if (targetId != null) unawaited(_fire(targetId));
+            onCellDoubleTapped: (CellCoord cell) {
+              if (targetId != null) unawaited(_fireAt(targetId, cell));
             },
           );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.theMatch),
-        bottom: wide
-            ? null
-            : TabBar(
-                controller: tabs,
-                tabs: <Widget>[
-                  Tab(text: spectating ? l10n.spectating : l10n.battle),
-                  Tab(text: l10n.players),
-                ],
-              ),
-      ),
-      body: SafeArea(
-        child: wide
-            ? mainView
-            : TabBarView(
-                controller: tabs,
-                children: <Widget>[
-                  mainView,
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    children: <Widget>[players],
-                  ),
-                ],
-              ),
-      ),
+      appBar: AppBar(title: Text(l10n.theMatch)),
+      body: SafeArea(child: mainView),
     );
   }
 
@@ -286,10 +242,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     if (mounted) context.go('/');
   }
 
-  Future<void> _fire(String targetId) async {
-    final CellCoord? cell = _selectedCell;
-    if (cell == null) return;
-
+  Future<void> _fireAt(String targetId, CellCoord cell) async {
     ref.read(matchFeedbackProvider).fire();
     setState(() => _selectedCell = null);
     await ref
@@ -310,7 +263,7 @@ class _BattleTab extends StatelessWidget {
     this.sidePanel,
     required this.onTargetSelected,
     required this.onCellTapped,
-    required this.onFire,
+    required this.onCellDoubleTapped,
   });
 
   final MatchSnapshot snapshot;
@@ -326,7 +279,7 @@ class _BattleTab extends StatelessWidget {
 
   final ValueChanged<String> onTargetSelected;
   final ValueChanged<CellCoord> onCellTapped;
-  final VoidCallback onFire;
+  final ValueChanged<CellCoord> onCellDoubleTapped;
 
   @override
   Widget build(BuildContext context) {
@@ -345,11 +298,15 @@ class _BattleTab extends StatelessWidget {
               shot.column == selectedCell!.column,
         );
     final bool canInteract = isMyTurn && !session.firePending && remaining != 0;
-    final bool canFire =
-        canInteract &&
-        target?.alive == true &&
-        selectedCell != null &&
-        !alreadyFired;
+    /// Fires at a double-tapped cell, unless the cell was already fired at.
+    void onDoubleTapped(CellCoord cell) {
+      final bool fired = target!.shots.any(
+        (ShotView shot) => shot.row == cell.row && shot.column == cell.column,
+      );
+      if (canInteract && target.alive && !fired) onCellDoubleTapped(cell);
+    }
+
+    final OwnBoardView? ownBoard = snapshot.ownBoard;
 
     final List<Widget> header = <Widget>[
       if (snapshot.winnerPlayerId != null) ...<Widget>[
@@ -370,29 +327,8 @@ class _BattleTab extends StatelessWidget {
         Text(_activityText(activity, l10n)),
         const SizedBox(height: 12),
       ],
-      if (snapshot.winnerPlayerId == null)
-        _TurnCard(
-          isMyTurn: isMyTurn,
-          activePlayerName:
-              snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
-          remaining: remaining,
-          turnNumber: snapshot.turnNumber,
-        ),
-      AnimatedSwitcher(
-        duration: reducedMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 220),
-        child: session.lastShot == null
-            ? const SizedBox.shrink(key: ValueKey<String>('no-shot'))
-            : Padding(
-                key: ValueKey<ShotFeedback>(session.lastShot!),
-                padding: const EdgeInsets.only(top: 12),
-                child: _FeedbackCard(
-                  feedback: session.lastShot!,
-                  viewerPlayerId: session.playerId,
-                ),
-              ),
-      ),
+      // Turn status and shot feedback float above the board instead of
+      // taking up rows in the scroll, so the match view stays compact.
     ];
 
     final Widget attack = Column(
@@ -439,9 +375,31 @@ class _BattleTab extends StatelessWidget {
                   rows: rows,
                   columns: columns,
                   shots: target.shots,
+                  // The own fleet is part of the same board, faded, so the
+                  // screen keeps a single grid instead of two boards.
+                  ownShips:
+                      ownBoard?.ships
+                          .map(
+                            (ShipView ship) => ShipPlacement(
+                              shipId: ship.shipId,
+                              length: ship.length,
+                              orientation: ship.orientation,
+                              row: ship.row,
+                              column: ship.column,
+                            ),
+                          )
+                          .toList() ??
+                      const <ShipPlacement>[],
+                  ownSunkShips:
+                      ownBoard?.ships
+                          .where((ShipView ship) => ship.sunk)
+                          .map((ShipView ship) => ship.shipId)
+                          .toSet() ??
+                      const <String>{},
                   selectedCell: selectedCell,
                   enabled: canInteract,
                   onCellTapped: onCellTapped,
+                  onCellDoubleTapped: onDoubleTapped,
                 ),
               );
             },
@@ -460,62 +418,98 @@ class _BattleTab extends StatelessWidget {
           ),
         const SizedBox(height: 16),
         if (snapshot.winnerPlayerId == null)
-          FilledButton.icon(
-            onPressed: canFire ? onFire : null,
-            icon: const Icon(Icons.local_fire_department),
-            label: Text(
-              session.firePending
-                  ? l10n.waitingForHost
-                  : isMyTurn
-                  ? l10n.fireAtThisCell
-                  : l10n.waitForYourTurn,
-            ),
+          Row(
+            children: <Widget>[
+              Icon(
+                session.firePending
+                    ? Icons.hourglass_empty
+                    : isMyTurn
+                    ? Icons.touch_app_outlined
+                    : Icons.hourglass_empty,
+                size: 16,
+                color: isMyTurn ? AppTheme.accent : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  session.firePending
+                      ? l10n.waitingForHost
+                      : isMyTurn
+                      ? l10n.doubleTapToFire
+                      : l10n.waitForYourTurn,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
       ],
     );
 
-    final Widget ownFleet = _OwnFleetSection(
-      snapshot: snapshot,
-      session: session,
-    );
-
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        // Wide screens show both fleets at once instead of one below the other.
+        // Wide screens put the player list next to the board.
         final bool sideBySide = constraints.maxWidth >= _wideLayoutWidth;
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        return Stack(
           children: <Widget>[
-            ...header,
-            if (sideBySide)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(child: attack),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        ownFleet,
-                        if (sidePanel case final Widget panel) ...<Widget>[
-                          const SizedBox(height: 24),
-                          panel,
-                        ],
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+              children: <Widget>[
+                ...header,
+                if (sideBySide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(child: attack),
+                      if (sidePanel case final Widget panel) ...<Widget>[
+                        const SizedBox(width: 16),
+                        Expanded(child: panel),
                       ],
-                    ),
-                  ),
+                    ],
+                  )
+                else ...<Widget>[
+                  attack,
+                  if (sidePanel case final Widget panel) ...<Widget>[
+                    const SizedBox(height: 24),
+                    panel,
+                  ],
                 ],
-              )
-            else ...<Widget>[
-              attack,
-              const SizedBox(height: 24),
-              ownFleet,
-              if (sidePanel case final Widget panel) ...<Widget>[
-                const SizedBox(height: 24),
-                panel,
               ],
-            ],
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Material(
+                elevation: 6,
+                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.surface,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      if (snapshot.winnerPlayerId == null)
+                        _TurnCard(
+                          isMyTurn: isMyTurn,
+                          activePlayerName:
+                              snapshot.playerById(snapshot.activePlayerId)?.displayName ??
+                                  '',
+                          remaining: remaining,
+                          turnNumber: snapshot.turnNumber,
+                        ),
+                      if (session.lastShot != null) ...<Widget>[
+                        const SizedBox(height: 8),
+                        _FeedbackCard(
+                          feedback: session.lastShot!,
+                          viewerPlayerId: session.playerId,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ],
         );
       },

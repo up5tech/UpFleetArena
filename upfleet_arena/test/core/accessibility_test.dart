@@ -30,7 +30,8 @@ void main() {
 
     expect(
       find.bySemanticsLabel(
-        'Target board, 10 rows by 10 columns. Tap a cell to select it.',
+        'Target board, 10 rows by 10 columns. Tap a cell to select it, '
+        'double-tap to fire.',
       ),
       findsOneWidget,
     );

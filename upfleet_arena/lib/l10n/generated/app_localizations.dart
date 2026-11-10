@@ -1241,7 +1241,7 @@ abstract class AppLocalizations {
   /// No description provided for @boardLegend.
   ///
   /// In en, this message translates to:
-  /// **'Dot: miss · Filled dot: hit · Ring: sunk'**
+  /// **'Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk'**
   String get boardLegend;
 
   /// No description provided for @selectedCell.
@@ -1262,11 +1262,11 @@ abstract class AppLocalizations {
   /// **'Waiting for host…'**
   String get waitingForHost;
 
-  /// No description provided for @fireAtThisCell.
+  /// No description provided for @doubleTapToFire.
   ///
   /// In en, this message translates to:
-  /// **'Fire at this cell'**
-  String get fireAtThisCell;
+  /// **'Double-tap a cell to fire at it.'**
+  String get doubleTapToFire;
 
   /// No description provided for @waitForYourTurn.
   ///
@@ -1499,7 +1499,7 @@ abstract class AppLocalizations {
   /// No description provided for @targetBoardSemantics.
   ///
   /// In en, this message translates to:
-  /// **'Target board, {rows} rows by {columns} columns. Tap a cell to select it.'**
+  /// **'Target board, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.'**
   String targetBoardSemantics(int rows, int columns);
 
   /// No description provided for @ownBoardSemantics.

@@ -661,7 +661,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noTargetsLeft => 'There is nobody left to shoot at.';
 
   @override
-  String get boardLegend => 'Dot: miss · Filled dot: hit · Ring: sunk';
+  String get boardLegend =>
+      'Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk';
 
   @override
   String selectedCell(String cell) {
@@ -677,7 +678,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get waitingForHost => 'Waiting for host…';
 
   @override
-  String get fireAtThisCell => 'Fire at this cell';
+  String get doubleTapToFire => 'Double-tap a cell to fire at it.';
 
   @override
   String get waitForYourTurn => 'Wait for your turn';
@@ -816,7 +817,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String targetBoardSemantics(int rows, int columns) {
-    return 'Target board, $rows rows by $columns columns. Tap a cell to select it.';
+    return 'Target board, $rows rows by $columns columns. Tap a cell to select it, double-tap to fire.';
   }
 
   @override

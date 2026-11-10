@@ -655,7 +655,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noTargetsLeft => 'Không còn ai để bắn.';
 
   @override
-  String get boardLegend => 'Chấm: trượt · Chấm đầy: trúng · Vòng: chìm';
+  String get boardLegend =>
+      'Tàu mờ: hạm đội của bạn · Chấm: trượt · Chấm đầy: trúng · Vòng: chìm';
 
   @override
   String selectedCell(String cell) {
@@ -671,7 +672,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get waitingForHost => 'Đang chờ chủ phòng…';
 
   @override
-  String get fireAtThisCell => 'Bắn vào ô này';
+  String get doubleTapToFire => 'Nhấn đúp vào một ô để bắn.';
 
   @override
   String get waitForYourTurn => 'Chờ đến lượt bạn';
@@ -810,7 +811,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String targetBoardSemantics(int rows, int columns) {
-    return 'Bàn mục tiêu, $rows hàng và $columns cột. Chạm một ô để chọn.';
+    return 'Bàn mục tiêu, $rows hàng và $columns cột. Chạm một ô để chọn, nhấn đúp để bắn.';
   }
 
   @override

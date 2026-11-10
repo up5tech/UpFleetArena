@@ -154,6 +154,14 @@ class _NoopSoundPlayer implements SoundPlayer {
 
 late SharedPreferences _testPreferences;
 
+/// Double-taps a point, two taps inside the double-tap window.
+Future<void> _doubleTapAt(WidgetTester tester, Offset position) async {
+  await tester.tapAt(position);
+  await tester.pump(const Duration(milliseconds: 60));
+  await tester.tapAt(position);
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
 Widget _app(_FakeSessionController controller, {SoundPlayer? sounds}) {
   return ProviderScope(
     overrides: [
@@ -199,40 +207,34 @@ void main() {
     expect(find.text('Turn 3 · 22s left'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Bob'), findsOneWidget);
     expect(find.byType(BattleBoard), findsOneWidget);
-    // The own fleet shares the battle view instead of a second tab.
+    // One board carries both the shots and the own fleet, faded.
     expect(find.text('Your board'), findsNothing);
     expect(find.byType(TabBar), findsNothing);
-    expect(find.text('Your fleet'), findsOneWidget);
-    expect(find.byType(BoardCanvas), findsOneWidget);
+    expect(find.text('Your fleet'), findsNothing);
+    expect(find.byType(BoardCanvas), findsNothing);
+    expect(
+      find.text('Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk'),
+      findsOneWidget,
+    );
+
+    final BattleBoard board = tester.widget<BattleBoard>(
+      find.byType(BattleBoard),
+    );
+    expect(board.ownShips, hasLength(1));
+    expect(board.ownShips.single.shipId, 'ship-1');
+    expect(board.ownSunkShips, isEmpty);
   });
 
-  testWidgets('a wide screen shows both fleets side by side', (
+  testWidgets('a wide screen shows a single board with the own fleet', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_app(_FakeSessionController(session: _session())));
 
-    expect(find.text('Your fleet'), findsOneWidget);
-
+    expect(find.byType(BattleBoard), findsOneWidget);
     final Rect attack = tester.getRect(find.byType(BattleBoard));
-    final Rect own = tester.getRect(find.byType(BoardCanvas));
-    // The own fleet starts to the right of the attack board, not below it.
-    expect(own.left, greaterThan(attack.right));
-    expect(own.top, lessThan(attack.bottom));
-  });
-
-  testWidgets('a narrow screen stacks the own fleet below', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(400, 3000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(_app(_FakeSessionController(session: _session())));
-    await tester.pump();
-
-    final Rect attack = tester.getRect(find.byType(BattleBoard));
-    final Rect own = tester.getRect(find.byType(BoardCanvas));
-    expect(own.top, greaterThan(attack.bottom));
+    // The player list stays in the column beside the only board.
+    final Rect roster = tester.getRect(find.text('Turn order'));
+    expect(roster.left, greaterThan(attack.right));
   });
 
   for (final double scale in <double>[1, 1.3]) {
@@ -252,9 +254,6 @@ void main() {
       await tester.pump();
 
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Players'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
 
       // The clock, ships and timeouts move to a second line instead of
       // overflowing the panel.
@@ -278,14 +277,11 @@ void main() {
 
     final Rect board = tester.getRect(find.byType(BattleBoard));
     final double cell = board.width / RoomConfig.defaults.columns;
-    // Tap the middle of the cell, not its edge.
-    await tester.tapAt(
+    // Double-tap the middle of the cell, not its edge: no fire button.
+    await _doubleTapAt(
+      tester,
       Offset(board.left + cell * 4.5, board.top + cell * 4.5),
     );
-    await tester.pump();
-
-    await tester.tap(find.text('Fire at this cell'));
-    await tester.pump();
 
     expect(controller.shots, hasLength(1));
     expect(controller.shots.single.$1, 'player-2');
@@ -302,11 +298,16 @@ void main() {
     await tester.pumpWidget(_app(controller));
 
     expect(find.text('Bob is shooting'), findsOneWidget);
+    expect(find.text('Wait for your turn'), findsOneWidget);
 
-    final FilledButton fire = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Wait for your turn'),
+    final Rect board = tester.getRect(find.byType(BattleBoard));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await _doubleTapAt(
+      tester,
+      Offset(board.left + cell * 4.5, board.top + cell * 4.5),
     );
-    expect(fire.onPressed, isNull);
+
+    expect(controller.shots, isEmpty);
   });
 
   testWidgets('the result of a shot is shown', (WidgetTester tester) async {
@@ -472,7 +473,7 @@ void main() {
     expect(sounds.played, isEmpty);
   });
 
-  testWidgets('a narrow screen keeps the players in a tab', (
+  testWidgets('a narrow screen keeps the players in the same scroll', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(400, 3000);
@@ -484,10 +485,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(TabBar), findsOneWidget);
-    await tester.tap(find.text('Players'));
-    await tester.pumpAndSettle();
-
+    expect(find.byType(TabBar), findsNothing);
     expect(find.text('Alice (you)'), findsOneWidget);
     expect(find.text('1 timeouts'), findsOneWidget);
   });
@@ -534,7 +532,7 @@ void main() {
     );
     expect(find.text('Bob is shooting'), findsOneWidget);
     expect(find.text('Turn 3 · 22s left'), findsOneWidget);
-    expect(find.text('Fire at this cell'), findsNothing);
+    expect(find.text('Double-tap a cell to fire at it.'), findsNothing);
     expect(find.text('Wait for your turn'), findsNothing);
     expect(controller.shots, isEmpty);
   });
