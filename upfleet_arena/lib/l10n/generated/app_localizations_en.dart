@@ -113,11 +113,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get squareShape => 'Square';
-
-  @override
   String get squareHint =>
-      'Only a ship whose cells form a square (4, 9, 16…) can be placed as a block. Pick the ship, then tap Square.';
+      'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: pick it and tap Rotate, or double tap it on the board.';
 
   @override
   String shipsLeftCount(int count) {

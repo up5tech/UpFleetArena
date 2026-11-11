@@ -37,6 +37,24 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   String? _selectedShipId;
   CellCoord? _previewCell;
   String? _hint;
+
+  /// The cell of the ship that stays under the finger while dragging.
+  ///
+  /// A ship grabbed by its second cell keeps that cell under the finger, so
+  /// the hull does not jump to the touched cell.
+  int _grabRowOffset = 0;
+  int _grabColumnOffset = 0;
+
+  /// The last touch, used to recognize a second tap without making the board
+  /// wait for the double-tap timeout.
+  DateTime? _lastTapAt;
+  CellCoord? _lastTapCell;
+
+  /// Whether the current touch was a double tap that already rotated a ship.
+  bool _doubleTapHandled = false;
+
+  /// How close together two taps must be to count as a double tap.
+  static const Duration _doubleTapWindow = Duration(milliseconds: 320);
   final Map<String, ShipOrientation> _pendingOrientation =
       <String, ShipOrientation>{};
 
@@ -151,8 +169,8 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
       length: length,
       span: span,
       orientation: _orientationOf(shipId),
-      row: cell.row,
-      column: cell.column,
+      row: cell.row - _grabRowOffset,
+      column: cell.column - _grabColumnOffset,
     );
   }
 
@@ -215,7 +233,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               previewIsValid: _previewIsValid,
               onCellPreview: _handlePreview,
               onCellCommit: _handleCommit,
-              onDragStart: _handleDragStart,
+              onPointerDown: _handlePointerDown,
               onDragEnd: _handleDragEnd,
             ),
             const SizedBox(height: 16),
@@ -261,17 +279,6 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                 ),
                 OutlinedButton.icon(
                   style: _actionButtonStyle,
-                  onPressed:
-                      _selectedShipId == null ||
-                          locked ||
-                          _profile.squareSideOf(_selectedShipId!) == null
-                      ? null
-                      : _toggleSquare,
-                  icon: const Icon(Icons.crop_square, size: 18),
-                  label: Text(l10n.squareShape),
-                ),
-                OutlinedButton.icon(
-                  style: _actionButtonStyle,
                   onPressed: _undoStack.isEmpty ? null : _undo,
                   icon: const Icon(Icons.undo, size: 18),
                   label: Text(l10n.undo),
@@ -312,6 +319,8 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     setState(() {
       _selectedShipId = _selectedShipId == shipId ? null : shipId;
       _previewCell = null;
+      _grabRowOffset = 0;
+      _grabColumnOffset = 0;
       _hint = null;
     });
   }
@@ -321,15 +330,56 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     setState(() => _previewCell = cell);
   }
 
-  /// Picks up the ship under the finger when a drag starts with no selection.
+  /// Picks up the ship under the finger.
   ///
-  /// Auto Place fills the whole fleet, but the player may still move any ship:
-  /// dragging a placed one carries it to the cell where the finger is lifted.
-  void _handleDragStart(CellCoord cell) {
+  /// Auto Place fills the whole fleet, but the player may still move any ship.
+  /// The grabbed cell stays under the finger, so the hull does not jump one
+  /// cell when it is picked up by its middle.
+  void _handlePointerDown(CellCoord cell) {
+    // A second tap on the same cell rotates the ship there, so a placed fleet
+    // can be turned without reaching for the action row.
+    final DateTime now = DateTime.now();
+    final bool doubleTap =
+        _lastTapAt != null &&
+        now.difference(_lastTapAt!) < _doubleTapWindow &&
+        _lastTapCell == cell;
+    _lastTapAt = now;
+    _lastTapCell = cell;
+    if (doubleTap) {
+      _rotateTapped(cell);
+      return;
+    }
+
     if (_selectedShipId != null) return;
     final ShipPlacement? ship = _shipAt(cell);
     if (ship == null) return;
-    setState(() => _selectedShipId = ship.shipId);
+    _grabShip(ship, cell);
+  }
+
+  /// Rotates the ship under the finger, selecting it first when it is not the
+  /// ship that is currently picked up.
+  void _rotateTapped(CellCoord cell) {
+    final ShipPlacement? tapped = _shipAt(cell);
+    final String? shipId = tapped?.shipId ?? _selectedShipId;
+    if (shipId == null) return;
+    if (tapped != null && tapped.shipId != _selectedShipId) {
+      _grabShip(tapped, cell);
+    }
+    // The tap that ended the double tap must not place or move the ship.
+    _doubleTapHandled = true;
+    _rotate();
+  }
+
+  /// Selects a ship that is already on the board, keeping the touched cell as
+  /// the grab point.
+  void _grabShip(ShipPlacement ship, CellCoord cell) {
+    setState(() {
+      _selectedShipId = ship.shipId;
+      _previewCell = null;
+      _hint = null;
+      _grabRowOffset = cell.row - ship.row;
+      _grabColumnOffset = cell.column - ship.column;
+    });
   }
 
   /// The ship of the own fleet that lies on [cell], if any.
@@ -347,17 +397,33 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   }
 
   void _handleCommit(CellCoord cell) {
-    final String? shipId = _selectedShipId;
-    if (shipId == null) {
-      _selectShipAt(cell);
+    if (_doubleTapHandled) {
+      _doubleTapHandled = false;
+      setState(() => _previewCell = null);
       return;
     }
+    final String? shipId = _selectedShipId;
+    final ShipPlacement? tapped = _shipAt(cell);
+    // Tapping a ship that is already on the board selects it, so a fleet can
+    // be edited on the board without going back to the inventory.
+    if (tapped != null && tapped.shipId != shipId) {
+      _grabShip(tapped, cell);
+      return;
+    }
+    if (shipId == null) return;
     _commit(cell);
   }
 
   void _commit(CellCoord cell) {
     final String? shipId = _selectedShipId;
     if (shipId == null) return;
+
+    // The grabbed cell stays under the finger, so the hull does not jump one
+    // cell when it was picked up by its middle.
+    final int row = cell.row - _grabRowOffset;
+    final int column = cell.column - _grabColumnOffset;
+    _grabRowOffset = 0;
+    _grabColumnOffset = 0;
 
     final int? length = _lengthOf(shipId);
     final int? span = _spanOf(shipId);
@@ -368,9 +434,19 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
       length: length,
       span: span,
       orientation: _orientationOf(shipId),
-      row: cell.row,
-      column: cell.column,
+      row: row,
+      column: column,
     );
+
+    // Tapping a ship without moving it only selects it.
+    final ShipPlacement? current = _placedShip(shipId);
+    if (current == candidate) {
+      setState(() {
+        _hint = null;
+        _previewCell = null;
+      });
+      return;
+    }
 
     final List<ShipPlacement> next =
         _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
@@ -394,28 +470,50 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     ref.read(roomSessionControllerProvider.notifier).setPlacement(next);
   }
 
-  /// Selects the ship that lies on the tapped cell.
-  void _selectShipAt(CellCoord cell) {
-    final ShipPlacement? ship = _shipAt(cell);
-    if (ship != null) _selectShip(ship.shipId);
-  }
-
+  /// Cycles the shape of the selected ship.
+  ///
+  /// A ship goes through its two line forms and, when its cells form a square,
+  /// through the block as well: horizontal, vertical, block, horizontal.
   void _rotate() {
     final String? shipId = _selectedShipId;
     if (shipId == null) return;
-    // A square block covers the same cells in both directions.
-    if (_isSquare(shipId)) return;
+
+    final bool square = _isSquare(shipId);
+    final ShipOrientation orientation = _orientationOf(shipId);
+    final int? side = _profile.squareSideOf(shipId);
+    final bool toSquare =
+        side != null && !square && orientation == ShipOrientation.vertical;
 
     final ShipPlacement? placed = _placedShip(shipId);
     if (placed == null) {
       setState(() {
-        _pendingOrientation[shipId] = _orientationOf(shipId).flipped;
+        _pendingSquare[shipId] = toSquare;
+        _pendingOrientation[shipId] = square || toSquare
+            ? ShipOrientation.horizontal
+            : orientation.flipped;
         _hint = null;
+        _previewCell = null;
       });
       return;
     }
 
-    final ShipPlacement rotated = placed.rotated();
+    final ShipPlacement rotated;
+    if (square) {
+      // The block goes back to a horizontal line of its cell count.
+      rotated = placed.copyWith(
+        length: _profile.lengthOf(shipId) ?? placed.length,
+        span: _profile.spanOf(shipId) ?? 1,
+        orientation: ShipOrientation.horizontal,
+      );
+    } else if (toSquare) {
+      rotated = placed.copyWith(
+        length: side,
+        span: side,
+        orientation: ShipOrientation.horizontal,
+      );
+    } else {
+      rotated = placed.rotated();
+    }
     final List<ShipPlacement> next =
         _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
           ..add(rotated);
@@ -429,60 +527,6 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
       setState(() => _hint = error.message);
       return;
     }
-
-    _pushUndo();
-    setState(() {
-      _hint = null;
-      _previewCell = null;
-    });
-    ref.read(roomSessionControllerProvider.notifier).setPlacement(next);
-  }
-
-  /// Switches the selected ship between a line and a square block.
-  ///
-  /// Only a ship whose cells can form a square is offered the block shape.
-  void _toggleSquare() {
-    final String? shipId = _selectedShipId;
-    if (shipId == null) return;
-    final int? side = _profile.squareSideOf(shipId);
-    if (side == null) return;
-    final bool toSquare = !_isSquare(shipId);
-
-    final ShipPlacement? placed = _placedShip(shipId);
-    if (placed == null) {
-      setState(() {
-        _pendingSquare[shipId] = toSquare;
-        _hint = null;
-        _previewCell = null;
-      });
-      return;
-    }
-
-    final ShipPlacement candidate = toSquare
-        ? placed.copyWith(
-            length: side,
-            span: side,
-            orientation: ShipOrientation.horizontal,
-          )
-        : placed.copyWith(
-            length: _profile.lengthOf(shipId) ?? placed.length,
-            span: _profile.spanOf(shipId) ?? 1,
-          );
-
-    final List<ShipPlacement> next =
-        _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
-          ..add(candidate);
-
-    final PlacementError? error = validateFleetLayout(
-      board: _board,
-      profile: _profile,
-      ships: next,
-    );
-    if (error != null) {
-      setState(() => _hint = error.message);
-      return;
-    }
-
     _pushUndo();
     setState(() {
       _hint = null;
@@ -535,7 +579,7 @@ class _BoardSection extends StatelessWidget {
     required this.previewIsValid,
     required this.onCellPreview,
     required this.onCellCommit,
-    required this.onDragStart,
+    required this.onPointerDown,
     required this.onDragEnd,
   });
 
@@ -546,7 +590,7 @@ class _BoardSection extends StatelessWidget {
   final bool previewIsValid;
   final void Function(CellCoord cell) onCellPreview;
   final void Function(CellCoord cell) onCellCommit;
-  final void Function(CellCoord cell) onDragStart;
+  final void Function(CellCoord cell) onPointerDown;
   final VoidCallback onDragEnd;
 
   @override
@@ -565,7 +609,7 @@ class _BoardSection extends StatelessWidget {
             previewIsValid: previewIsValid,
             onCellPreview: onCellPreview,
             onCellCommit: onCellCommit,
-            onDragStart: onDragStart,
+            onPointerDown: onPointerDown,
             onDragEnd: onDragEnd,
           ),
         );

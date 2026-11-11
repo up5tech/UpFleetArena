@@ -35,8 +35,7 @@
 
   "cellsCount": "{count} ô",
   "shipSize": "{width}×{height}",
-  "squareShape": "Vuông",
-  "squareHint": "Chỉ tàu có số ô ghép được thành hình vuông (4, 9, 16…) mới đặt được thành khối. Chọn tàu rồi bấm Vuông.",
+  "squareHint": "Chỉ tàu có số ô ghép được thành hình vuông (4, 9, 16…) mới xoay được thành khối: chọn tàu rồi bấm Xoay, hoặc chạm hai lần vào tàu trên bàn.",
   "@shipSize": {
     "placeholders": {
       "width": { "type": "int" },

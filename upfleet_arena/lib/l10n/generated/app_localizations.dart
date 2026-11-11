@@ -296,16 +296,10 @@ abstract class AppLocalizations {
   /// **'{width}×{height}'**
   String shipSize(int width, int height);
 
-  /// No description provided for @squareShape.
-  ///
-  /// In en, this message translates to:
-  /// **'Square'**
-  String get squareShape;
-
   /// No description provided for @squareHint.
   ///
   /// In en, this message translates to:
-  /// **'Only a ship whose cells form a square (4, 9, 16…) can be placed as a block. Pick the ship, then tap Square.'**
+  /// **'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: pick it and tap Rotate, or double tap it on the board.'**
   String get squareHint;
 
   /// No description provided for @shipsLeftCount.

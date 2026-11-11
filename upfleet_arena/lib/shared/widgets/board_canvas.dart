@@ -27,7 +27,7 @@ class BoardCanvas extends StatelessWidget {
     this.onCellPreview,
     this.onPreviewCleared,
     this.onCellCommit,
-    this.onDragStart,
+    this.onPointerDown,
     this.onDragEnd,
   });
 
@@ -63,11 +63,13 @@ class BoardCanvas extends StatelessWidget {
   /// Called while the finger moves over the board.
   final void Function(CellCoord cell)? onCellPreview;
 
-  /// Called when a drag starts on a cell, before the first preview.
+  /// Called with the cell the finger touched, before any gesture is
+  /// recognized.
   ///
-  /// A tap never fires it: the placement screen uses it to pick up the ship
-  /// under the finger so an existing fleet stays editable.
-  final void Function(CellCoord cell)? onDragStart;
+  /// The placement screen uses it to pick up the ship under the finger, so an
+  /// auto-placed fleet stays editable and the hull keeps the grabbed cell
+  /// under the finger while it is dragged.
+  final void Function(CellCoord cell)? onPointerDown;
 
   /// Called when the finger leaves the board or the gesture is cancelled.
   final VoidCallback? onPreviewCleared;
@@ -104,10 +106,15 @@ class BoardCanvas extends StatelessWidget {
           child: Semantics(
             label: AppLocalizations.of(context).ownBoardSemantics(rows, columns),
             container: true,
-            child: SizedBox(
-              width: cellSize * columns,
-              height: cellSize * rows,
-              child: GestureDetector(
+            child: Listener(
+              onPointerDown: (PointerDownEvent event) {
+                final CellCoord? cell = cellAt(event.localPosition);
+                if (cell != null) onPointerDown?.call(cell);
+              },
+              child: SizedBox(
+                width: cellSize * columns,
+                height: cellSize * rows,
+                child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (TapDownDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
@@ -120,10 +127,7 @@ class BoardCanvas extends StatelessWidget {
                 onTapCancel: onPreviewCleared,
                 onPanStart: (DragStartDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) {
-                    onDragStart?.call(cell);
-                    onCellPreview?.call(cell);
-                  }
+                  if (cell != null) onCellPreview?.call(cell);
                 },
                 onPanUpdate: (DragUpdateDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
@@ -146,6 +150,7 @@ class BoardCanvas extends StatelessWidget {
                     preview: preview,
                     previewIsValid: previewIsValid,
                   ),
+                ),
                 ),
               ),
             ),

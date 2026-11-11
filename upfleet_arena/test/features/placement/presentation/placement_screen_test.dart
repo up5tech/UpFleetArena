@@ -193,7 +193,10 @@ void main() {
 
     await tester.tap(find.text('4 cells'));
     await tester.pump();
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Square'));
+    // Rotate cycles horizontal, vertical and then the block.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Rotate'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Rotate'));
     await tester.pump();
     // The chip shows the shape that is about to be placed.
     expect(find.text('2×2'), findsOneWidget);
@@ -208,6 +211,40 @@ void main() {
     expect(sent.span, 2);
     expect(sent.isSquare, isTrue);
     expect(sent.cells, hasLength(4));
+  });
+
+  testWidgets('a square ship can be turned back into a rectangle', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(
+        ships: <ShipLayout>[
+          const ShipLayout(
+            shipId: 'ship-1',
+            length: 2,
+            span: 2,
+            orientation: ShipOrientation.horizontal,
+            row: 0,
+            column: 0,
+          ),
+          ..._standardFleet().skip(1),
+        ],
+      ),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    // The chip shows the block shape it is in.
+    await tester.tap(find.text('2×2'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Rotate'));
+    await tester.pump();
+
+    final ShipPlacement ship = controller.sentLayouts.last.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-1',
+    );
+    expect(ship.length, 4);
+    expect(ship.span, 1);
+    expect(ship.isSquare, isFalse);
   });
 
   testWidgets('the screen explains which ships can be a square', (
@@ -234,7 +271,7 @@ void main() {
     expect(find.textContaining('form a square'), findsNothing);
   });
 
-  testWidgets('a three-cell ship is not offered the square shape', (
+  testWidgets('a three-cell ship never becomes a block', (
     WidgetTester tester,
   ) async {
     final _FakeSessionController controller = _FakeSessionController(
@@ -244,11 +281,22 @@ void main() {
 
     await tester.tap(find.text('3 cells').first);
     await tester.pump();
+    // Its cells cannot form a square, so it only flips between the two line
+    // directions and comes back to the horizontal one.
+    for (int tap = 0; tap < 2; tap++) {
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Rotate'));
+      await tester.pump();
+    }
 
-    final OutlinedButton square = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Square'),
-    );
-    expect(square.onPressed, isNull);
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.tapAt(Offset(board.left + cell * 0.5, board.top + cell * 0.5));
+    await tester.pump();
+
+    final ShipPlacement sent = controller.sentLayouts.single.single;
+    expect(sent.length, 3);
+    expect(sent.span, 1);
+    expect(sent.orientation, ShipOrientation.horizontal);
   });
 
   testWidgets('a ship can be moved after the fleet was filled automatically', (
@@ -275,6 +323,66 @@ void main() {
     expect(moved.column, 8);
   });
 
+  testWidgets('a double tap on a placed ship rotates it', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    // The two-cell ship at row 8 is the one with room to turn.
+    final Offset ship = Offset(
+      board.left + cell * 0.5,
+      board.top + cell * 8.5,
+    );
+
+    await tester.tapAt(ship);
+    await tester.pump();
+    await tester.tapAt(ship);
+    await tester.pump();
+
+    expect(controller.sentLayouts, hasLength(1));
+    final ShipPlacement rotated = controller.sentLayouts.single.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-5',
+    );
+    expect(rotated.orientation, ShipOrientation.vertical);
+    expect(rotated.row, 8);
+    expect(rotated.column, 0);
+  });
+
+  testWidgets('tapping a placed ship selects it instead of moving another one', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    // The first ship is selected from the inventory.
+    await tester.tap(find.text('4 cells'));
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    // Tapping the two-cell ship on the board selects it, nothing is sent.
+    await tester.tapAt(Offset(board.left + cell * 0.5, board.top + cell * 8.5));
+    await tester.pump();
+    expect(controller.sentLayouts, isEmpty);
+
+    // The next tap moves that ship, not the one picked in the inventory.
+    await tester.tapAt(Offset(board.left + cell * 8.5, board.top + cell * 8.5));
+    await tester.pump();
+
+    final ShipPlacement moved = controller.sentLayouts.last.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-5',
+    );
+    expect(moved.row, 8);
+    expect(moved.column, 8);
+  });
+
   testWidgets('dragging a placed ship moves it', (WidgetTester tester) async {
     final _FakeSessionController controller = _FakeSessionController(
       session: _session(ships: _standardFleet()),
@@ -283,8 +391,10 @@ void main() {
 
     final Rect board = tester.getRect(find.byType(BoardCanvas));
     final double cell = board.width / RoomConfig.defaults.columns;
+    // Grabbed by its second cell, which stays under the finger: the hull moves
+    // to 8/8 instead of jumping to the touched 8/9.
     await tester.dragFrom(
-      Offset(board.left + cell * 0.5, board.top + cell * 6.5),
+      Offset(board.left + cell * 1.5, board.top + cell * 6.5),
       Offset(cell * 8, cell * 2),
     );
     await tester.pump();
