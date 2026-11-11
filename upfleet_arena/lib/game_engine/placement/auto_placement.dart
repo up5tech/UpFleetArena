@@ -7,8 +7,9 @@ import 'placement.dart';
 /// Places the whole fleet on the board without any overlap.
 ///
 /// The ships are placed largest first and every ship takes a random free
-/// spot, so the result is a legal layout that also looks hand-made. The
-/// caller owns the random source, which keeps the algorithm testable
+/// spot, so the result is a legal layout that also looks hand-made. A ship
+/// whose cells form a square is sometimes drawn as a block instead of a line.
+/// The caller owns the random source, which keeps the algorithm testable
 /// (PLAN.md §9.1).
 List<ShipPlacement> autoPlaceFleet({
   required BoardSize board,
@@ -27,8 +28,14 @@ List<ShipPlacement> autoPlaceFleet({
 
   for (final int index in order) {
     final String shipId = shipIds[index];
-    final int length = profile.shipLengths[index];
-    final int span = profile.spanAt(index);
+    final int baseLength = profile.shipLengths[index];
+    final int baseSpan = profile.spanAt(index);
+    final int? side = FleetProfile.squareSideFor(baseLength * baseSpan);
+    // Half of the square-capable ships are seated as blocks, which keeps the
+    // cell count and only changes the footprint.
+    final bool asBlock = side != null && random.nextBool();
+    final int length = asBlock ? side : baseLength;
+    final int span = asBlock ? side : baseSpan;
 
     final List<ShipPlacement> candidates = _candidates(
       board: board,

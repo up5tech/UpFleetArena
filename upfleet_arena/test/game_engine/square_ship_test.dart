@@ -187,21 +187,32 @@ void main() {
       );
     });
 
-    test('automatic placement keeps every ship a line', () {
+    test('automatic placement sometimes seats a four-cell ship as a block', () {
       final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
+      final Set<bool> blockSeen = <bool>{};
 
-      final List<ShipPlacement> ships = autoPlaceFleet(
-        board: board,
-        profile: profile,
-        random: Random(7),
-      );
+      for (int seed = 0; seed < 12; seed++) {
+        final List<ShipPlacement> ships = autoPlaceFleet(
+          board: board,
+          profile: profile,
+          random: Random(seed),
+        );
 
-      expect(ships.length, profile.shipCount);
-      expect(ships.every((ShipPlacement ship) => ship.isSquare), isFalse);
-      expect(
-        ships.expand((ShipPlacement ship) => ship.cells).toSet().length,
-        profile.totalCells,
-      );
+        expect(ships, hasLength(profile.shipCount));
+        expect(
+          validateFleetLayout(board: board, profile: profile, ships: ships),
+          isNull,
+        );
+        // A block keeps the cells of its ship: the layout still fills the
+        // whole fleet without overlapping.
+        expect(
+          ships.expand((ShipPlacement ship) => ship.cells).toSet().length,
+          profile.totalCells,
+        );
+        blockSeen.add(ships.any((ShipPlacement ship) => ship.isSquare));
+      }
+
+      expect(blockSeen, <bool>{true, false});
     });
 
     test('the wire form keeps the block', () {

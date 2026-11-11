@@ -123,7 +123,8 @@ Rules:
 - The Host is the only authority for the deadline. Client countdowns are
   visual estimates only.
 - Every player places all ships on their own board and can rotate ships.
-- Manual placement and **Auto Place** are both provided.
+- Manual placement and **Auto Place** are both provided. Auto Place may seat
+  a ship as a square block instead of a line when its cells form a square.
 - **Ready** is enabled only when the whole fleet is placed legally.
 - A ready player may not change their fleet unless the Host resets the
   placement phase.
