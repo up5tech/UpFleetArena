@@ -107,6 +107,22 @@ void main() {
     expect(controller.config?.columns, RoomConfig.defaults.columns);
   });
 
+  testWidgets('a preset board size is applied with one tap', (
+    WidgetTester tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.ensureVisible(find.text('12×12'));
+    await tester.tap(find.text('12×12'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Bắt đầu chơi'));
+    await tester.tap(find.text('Bắt đầu chơi'));
+    await tester.pump();
+
+    expect(controller.config?.rows, 12);
+    expect(controller.config?.columns, 12);
+  });
+
   testWidgets('the chosen board size reaches the practice config', (
     WidgetTester tester,
   ) async {

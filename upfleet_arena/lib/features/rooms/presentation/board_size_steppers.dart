@@ -33,12 +33,32 @@ class BoardSizeSteppers extends StatelessWidget {
   /// Whether the controls accept input.
   final bool enabled;
 
+  /// The square board sizes offered as one-tap presets.
+  static const List<int> squareSizes = <int>[8, 10, 12, 14];
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (final int size in squareSizes)
+              _SizeChip(
+                size: size,
+                selected: rows == size && columns == size,
+                enabled: enabled,
+                onTap: () {
+                  onRowsChanged(size);
+                  onColumnsChanged(size);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
         _Stepper(
           label: l10n.rows,
           value: rows,
@@ -61,6 +81,47 @@ class BoardSizeSteppers extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One square board size that fills both dimensions in a single tap.
+class _SizeChip extends StatelessWidget {
+  const _SizeChip({
+    required this.size,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final int size;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent.withValues(alpha: 0.18) : null,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppTheme.accent : AppTheme.surfaceBorder,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          '$size×$size',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : null,
+          ),
+        ),
+      ),
     );
   }
 }
