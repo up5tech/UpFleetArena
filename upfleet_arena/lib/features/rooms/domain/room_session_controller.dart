@@ -452,11 +452,11 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         );
 
     final RoomConfig baseConfig = config ?? RoomConfig.defaults;
-    final RoomConfig effectiveConfig = baseConfig.copyWith(
+    final RoomConfig requestedConfig = baseConfig.copyWith(
       botCount: opponents.length,
       botDifficulty: opponents.first,
     );
-    final List<String> problems = effectiveConfig.validate();
+    final List<String> problems = requestedConfig.validate();
     if (problems.isNotEmpty) {
       state = state.copyWith(
         status: RoomSessionStatus.failed,
@@ -473,7 +473,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       hostDisplayName: profile.displayName,
       avatarId: profile.avatarId,
       deviceId: ref.read(localPreferencesProvider).deviceId,
-      config: effectiveConfig,
+      // The computers are seated one by one below, each with its own name and
+      // strength, so the room must not seat the preset opponents as well: that
+      // would seat every opponent twice.
+      config: requestedConfig.copyWith(botCount: 0),
       tcpPort: 0,
     );
 
