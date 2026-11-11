@@ -37,7 +37,16 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
     final bool busy = session.status == RoomSessionStatus.working;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.playVsComputer)),
+      // An explicit arrow is needed: when this screen is reached with `go`
+      // (deep link, restored route) there is no page below to pop, and the
+      // automatic AppBar back button would not be shown at all.
+      appBar: AppBar(
+        title: Text(l10n.playVsComputer),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

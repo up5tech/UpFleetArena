@@ -36,7 +36,13 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     final bool busy = session.status == RoomSessionStatus.working;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.createRoomScreenTitle)),
+      appBar: AppBar(
+        title: Text(l10n.createRoomScreenTitle),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

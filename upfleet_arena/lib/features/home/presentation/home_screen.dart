@@ -65,25 +65,29 @@ class HomeScreen extends ConsumerWidget {
               children: <Widget>[
                 _HeroCard(),
                 const SizedBox(height: 16),
+                // Push keeps Home below the stack for these setup entries, so
+                // both the AppBar arrow and the Android back gesture can
+                // return to the launcher. `go` replaces the stack and left
+                // them with nothing to pop.
                 _PhaseEntry(
                   icon: Icons.smart_toy_outlined,
                   title: l10n.playVsComputer,
                   subtitle: l10n.playVsComputerSubtitle,
-                  onTap: () => context.go('/play-bot'),
+                  onTap: () => context.push('/play-bot'),
                 ),
                 const SizedBox(height: 8),
                 _PhaseEntry(
                   icon: Icons.add_home_work_outlined,
                   title: l10n.createRoom,
                   subtitle: l10n.createRoomSubtitle,
-                  onTap: () => context.go('/create-room'),
+                  onTap: () => context.push('/create-room'),
                 ),
                 const SizedBox(height: 8),
                 _PhaseEntry(
                   icon: Icons.login_outlined,
                   title: l10n.joinRoom,
                   subtitle: l10n.joinRoomSubtitle,
-                  onTap: () => context.go('/join-room'),
+                  onTap: () => context.push('/join-room'),
                 ),
                 const SizedBox(height: 8),
                 _PhaseEntry(
