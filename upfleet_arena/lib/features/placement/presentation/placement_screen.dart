@@ -53,6 +53,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   /// Whether the current touch was a double tap that already rotated a ship.
   bool _doubleTapHandled = false;
 
+  /// The cell where the current press and hold started.
+  CellCoord? _longPressCell;
+
   /// How close together two taps must be to count as a double tap.
   static const Duration _doubleTapWindow = Duration(milliseconds: 320);
   final Map<String, ShipOrientation> _pendingOrientation =
@@ -229,11 +232,15 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               rows: snapshot.config.rows,
               columns: snapshot.config.columns,
               ships: ships,
+              selectedShipId: _selectedShipId,
               preview: _preview,
               previewIsValid: _previewIsValid,
               onCellPreview: _handlePreview,
               onCellCommit: _handleCommit,
               onPointerDown: _handlePointerDown,
+              onLongPressStart: _handleLongPressStart,
+              onLongPressMove: _handleLongPressMove,
+              onLongPressEnd: _handleLongPressEnd,
               onDragEnd: _handleDragEnd,
             ),
             const SizedBox(height: 16),
@@ -355,6 +362,33 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     if (ship == null) return;
     _grabShip(ship, cell);
   }
+
+  /// Grabs the ship under the finger when a press and hold starts.
+  void _handleLongPressStart(CellCoord cell) {
+    if (_selectedShipId == null) {
+      final ShipPlacement? ship = _shipAt(cell);
+      if (ship == null) return;
+      _grabShip(ship, cell);
+    }
+    _longPressCell = cell;
+  }
+
+  /// Rotates the held ship when the finger swishes sideways.
+  ///
+  /// A vertical swish does nothing, and every full cell of horizontal travel
+  /// rotates once more, so all shapes stay reachable without lifting the
+  /// finger.
+  void _handleLongPressMove(CellCoord cell) {
+    final CellCoord? start = _longPressCell;
+    if (start == null) return;
+    final int dColumn = cell.column - start.column;
+    final int dRow = cell.row - start.row;
+    if (dColumn.abs() <= dRow.abs()) return;
+    _longPressCell = cell;
+    _rotate();
+  }
+
+  void _handleLongPressEnd() => _longPressCell = null;
 
   /// Rotates the ship under the finger, selecting it first when it is not the
   /// ship that is currently picked up.
@@ -575,22 +609,30 @@ class _BoardSection extends StatelessWidget {
     required this.rows,
     required this.columns,
     required this.ships,
+    required this.selectedShipId,
     required this.preview,
     required this.previewIsValid,
     required this.onCellPreview,
     required this.onCellCommit,
     required this.onPointerDown,
+    required this.onLongPressStart,
+    required this.onLongPressMove,
+    required this.onLongPressEnd,
     required this.onDragEnd,
   });
 
   final int rows;
   final int columns;
   final List<ShipPlacement> ships;
+  final String? selectedShipId;
   final ShipPlacement? preview;
   final bool previewIsValid;
   final void Function(CellCoord cell) onCellPreview;
   final void Function(CellCoord cell) onCellCommit;
   final void Function(CellCoord cell) onPointerDown;
+  final void Function(CellCoord cell) onLongPressStart;
+  final void Function(CellCoord cell) onLongPressMove;
+  final VoidCallback onLongPressEnd;
   final VoidCallback onDragEnd;
 
   @override
@@ -605,11 +647,15 @@ class _BoardSection extends StatelessWidget {
             rows: rows,
             columns: columns,
             ships: ships,
+            selectedShipId: selectedShipId,
             preview: preview,
             previewIsValid: previewIsValid,
             onCellPreview: onCellPreview,
             onCellCommit: onCellCommit,
             onPointerDown: onPointerDown,
+            onLongPressStart: onLongPressStart,
+            onLongPressMove: onLongPressMove,
+            onLongPressEnd: onLongPressEnd,
             onDragEnd: onDragEnd,
           ),
         );

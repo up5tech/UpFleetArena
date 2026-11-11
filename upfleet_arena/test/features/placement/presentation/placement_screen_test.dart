@@ -323,6 +323,28 @@ void main() {
     expect(moved.column, 8);
   });
 
+  testWidgets('the ship being held is highlighted on the board', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    final BoardCanvas before = tester.widget<BoardCanvas>(
+      find.byType(BoardCanvas),
+    );
+    expect(before.selectedShipId, isNull);
+
+    await tester.tap(find.text('2 cells').last);
+    await tester.pump();
+
+    final BoardCanvas after = tester.widget<BoardCanvas>(
+      find.byType(BoardCanvas),
+    );
+    expect(after.selectedShipId, 'ship-5');
+  });
+
   testWidgets('a double tap on a placed ship rotates it', (
     WidgetTester tester,
   ) async {
@@ -346,6 +368,33 @@ void main() {
 
     expect(controller.sentLayouts, hasLength(1));
     final ShipPlacement rotated = controller.sentLayouts.single.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-5',
+    );
+    expect(rotated.orientation, ShipOrientation.vertical);
+    expect(rotated.row, 8);
+    expect(rotated.column, 0);
+  });
+
+  testWidgets('a long press then a sideways drag rotates a placed ship', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    final TestGesture gesture = await tester.startGesture(
+      Offset(board.left + cell * 0.5, board.top + cell * 8.5),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(Offset(cell * 2, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    final ShipPlacement rotated = controller.sentLayouts.last.firstWhere(
       (ShipPlacement ship) => ship.shipId == 'ship-5',
     );
     expect(rotated.orientation, ShipOrientation.vertical);
@@ -381,6 +430,39 @@ void main() {
     );
     expect(moved.row, 8);
     expect(moved.column, 8);
+  });
+
+  testWidgets('a vertical drag moves a placed ship', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(
+        ships: <ShipLayout>[
+          const ShipLayout(
+            shipId: 'ship-5',
+            length: 2,
+            orientation: ShipOrientation.horizontal,
+            row: 8,
+            column: 0,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.dragFrom(
+      Offset(board.left + cell * 0.5, board.top + cell * 8.5),
+      Offset(0, -cell * 3),
+    );
+    await tester.pump();
+
+    final ShipPlacement moved = controller.sentLayouts.last.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-5',
+    );
+    expect(moved.row, 5);
+    expect(moved.column, 0);
   });
 
   testWidgets('dragging a placed ship moves it', (WidgetTester tester) async {

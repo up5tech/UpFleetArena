@@ -9,6 +9,7 @@ import '../../../shared/models/room_models.dart';
 import '../../profile/domain/profile.dart';
 import '../../profile/domain/profile_controller.dart';
 import '../../rooms/domain/room_session_controller.dart';
+import '../../rooms/presentation/board_size_steppers.dart';
 import 'bot_labels.dart';
 
 /// Picks the strength of the computer opponent and starts a solo match.
@@ -25,6 +26,8 @@ class BotSetupScreen extends ConsumerStatefulWidget {
 class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
   BotDifficulty _difficulty = BotDifficulty.medium;
   int _botCount = 1;
+  int _rows = RoomConfig.defaults.rows;
+  int _columns = RoomConfig.defaults.columns;
 
   @override
   Widget build(BuildContext context) {
@@ -64,9 +67,7 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           Text(
-                            '${l10n.board} · '
-                            '${RoomConfig.defaults.rows}×'
-                            '${RoomConfig.defaults.columns}',
+                            '${l10n.board} · $_rows×$_columns',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -75,6 +76,29 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
                     TextButton(
                       onPressed: () => context.push('/profile'),
                       child: Text(l10n.edit),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.board,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    BoardSizeSteppers(
+                      rows: _rows,
+                      columns: _columns,
+                      onRowsChanged: (int value) =>
+                          setState(() => _rows = value),
+                      onColumnsChanged: (int value) =>
+                          setState(() => _columns = value),
                     ),
                   ],
                 ),
@@ -193,6 +217,8 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
           difficulty: _difficulty,
           botName: botName,
           config: RoomConfig.defaults.copyWith(
+            rows: _rows,
+            columns: _columns,
             botCount: _botCount,
             botDifficulty: _difficulty,
           ),

@@ -22,12 +22,16 @@ class BoardCanvas extends StatelessWidget {
     this.misses = const <CellCoord>[],
     this.shotColors = const <CellCoord, Color>{},
     this.sunkShips = const <String>{},
+    this.selectedShipId,
     this.preview,
     this.previewIsValid = true,
     this.onCellPreview,
     this.onPreviewCleared,
     this.onCellCommit,
     this.onPointerDown,
+    this.onLongPressStart,
+    this.onLongPressMove,
+    this.onLongPressEnd,
     this.onDragEnd,
   });
 
@@ -54,6 +58,10 @@ class BoardCanvas extends StatelessWidget {
   /// The ships that were sunk: their hulls are drawn in the sunk colour.
   final Set<String> sunkShips;
 
+  /// The ship the player is holding: its hull is drawn brighter, so it is
+  /// clear which ship a rotate or a drag applies to.
+  final String? selectedShipId;
+
   /// The ship that would be placed at the cell under the finger.
   final ShipPlacement? preview;
 
@@ -70,6 +78,18 @@ class BoardCanvas extends StatelessWidget {
   /// auto-placed fleet stays editable and the hull keeps the grabbed cell
   /// under the finger while it is dragged.
   final void Function(CellCoord cell)? onPointerDown;
+
+  /// Called when a press and hold is recognized on a cell.
+  ///
+  /// The placement screen uses it to grab the ship under the finger and then
+  /// rotate it with a sideways swish.
+  final void Function(CellCoord cell)? onLongPressStart;
+
+  /// Called while the held finger moves to another cell.
+  final void Function(CellCoord cell)? onLongPressMove;
+
+  /// Called when the press and hold ends or is cancelled.
+  final VoidCallback? onLongPressEnd;
 
   /// Called when the finger leaves the board or the gesture is cancelled.
   final VoidCallback? onPreviewCleared;
@@ -102,6 +122,15 @@ class BoardCanvas extends StatelessWidget {
           return CellCoord(row, column);
         }
 
+        void previewAt(Offset local) {
+          final CellCoord? cell = cellAt(local);
+          if (cell != null) {
+            onCellPreview?.call(cell);
+          } else {
+            onPreviewCleared?.call();
+          }
+        }
+
         return Center(
           child: Semantics(
             label: AppLocalizations.of(context).ownBoardSemantics(rows, columns),
@@ -125,19 +154,32 @@ class BoardCanvas extends StatelessWidget {
                   if (cell != null) onCellCommit?.call(cell);
                 },
                 onTapCancel: onPreviewCleared,
-                onPanStart: (DragStartDetails details) {
+                onLongPressStart: (LongPressStartDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onCellPreview?.call(cell);
+                  if (cell != null) onLongPressStart?.call(cell);
                 },
-                onPanUpdate: (DragUpdateDetails details) {
+                onLongPressMoveUpdate: (LongPressMoveUpdateDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) {
-                    onCellPreview?.call(cell);
-                  } else {
-                    onPreviewCleared?.call();
-                  }
+                  if (cell != null) onLongPressMove?.call(cell);
                 },
-                onPanEnd: (DragEndDetails details) => onDragEnd?.call(),
+                onLongPressEnd: (LongPressEndDetails details) =>
+                    onLongPressEnd?.call(),
+                // Dragging is recognized per axis: a free pan needs twice the
+                // touch slop, so a vertical drag inside a scrolling page would
+                // be stolen by the scroll view before the board saw it.
+                onVerticalDragStart: (DragStartDetails details) =>
+                    previewAt(details.localPosition),
+                onVerticalDragUpdate: (DragUpdateDetails details) =>
+                    previewAt(details.localPosition),
+                onVerticalDragEnd: (DragEndDetails details) => onDragEnd?.call(),
+                onVerticalDragCancel: onDragEnd,
+                onHorizontalDragStart: (DragStartDetails details) =>
+                    previewAt(details.localPosition),
+                onHorizontalDragUpdate: (DragUpdateDetails details) =>
+                    previewAt(details.localPosition),
+                onHorizontalDragEnd: (DragEndDetails details) =>
+                    onDragEnd?.call(),
+                onHorizontalDragCancel: onDragEnd,
                 child: CustomPaint(
                   painter: BoardPainter(
                     rows: rows,
@@ -147,6 +189,7 @@ class BoardCanvas extends StatelessWidget {
                     misses: misses,
                     shotColors: shotColors,
                     sunkShips: sunkShips,
+                    selectedShipId: selectedShipId,
                     preview: preview,
                     previewIsValid: previewIsValid,
                   ),
@@ -171,6 +214,7 @@ class BoardPainter extends CustomPainter {
     this.misses = const <CellCoord>[],
     this.shotColors = const <CellCoord, Color>{},
     this.sunkShips = const <String>{},
+    this.selectedShipId,
     this.preview,
     this.previewIsValid = true,
   });
@@ -195,6 +239,9 @@ class BoardPainter extends CustomPainter {
 
   /// The ships that were sunk.
   final Set<String> sunkShips;
+
+  /// The ship the player is holding, drawn brighter than the rest.
+  final String? selectedShipId;
 
   /// The ship that would be placed at the cell under the finger.
   final ShipPlacement? preview;
@@ -260,6 +307,7 @@ class BoardPainter extends CustomPainter {
         cellSize,
         sunk ? AppTheme.sunk : AppTheme.accent,
         sunk ? 0.32 : 0.85,
+        highlighted: ship.shipId == selectedShipId,
       );
     }
 
@@ -300,8 +348,9 @@ class BoardPainter extends CustomPainter {
     double offsetY,
     double cellSize,
     Color color,
-    double opacity,
-  ) {
+    double opacity, {
+    bool highlighted = false,
+  }) {
     final List<CellCoord> cells = ship.cells;
     if (cells.isEmpty) return;
 
@@ -312,8 +361,35 @@ class BoardPainter extends CustomPainter {
       offsetY + (cells.last.row + 1) * cellSize,
     );
 
+    if (highlighted) {
+      // A soft halo marks the held hull, and a light ring on its edge
+      // separates it from the ships that touch it.
+      final Paint halo = Paint()
+        ..color = color.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(6, cellSize * 0.22);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          hull.deflate(cellSize * 0.1),
+          Radius.circular(math.min(10, cellSize * 0.3)),
+        ),
+        halo,
+      );
+      final Paint ring = Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(2, cellSize * 0.06);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          hull.deflate(1),
+          Radius.circular(math.min(8, cellSize * 0.2)),
+        ),
+        ring,
+      );
+    }
+
     final Paint fill = Paint()
-      ..color = color.withValues(alpha: opacity)
+      ..color = color.withValues(alpha: highlighted ? 1 : opacity)
       ..style = PaintingStyle.fill;
     final RRect shape = RRect.fromRectAndRadius(
       hull.deflate(2),
@@ -324,7 +400,7 @@ class BoardPainter extends CustomPainter {
     final Paint stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = highlighted ? 3 : 2;
     canvas.drawRRect(shape, stroke);
   }
 
@@ -337,6 +413,7 @@ class BoardPainter extends CustomPainter {
       oldDelegate.misses != misses ||
       oldDelegate.shotColors != shotColors ||
       oldDelegate.sunkShips != sunkShips ||
+      oldDelegate.selectedShipId != selectedShipId ||
       oldDelegate.preview != preview ||
       oldDelegate.previewIsValid != previewIsValid;
 }

@@ -35,7 +35,8 @@
 
   "cellsCount": "{count} cells",
   "shipSize": "{width}×{height}",
-  "squareHint": "Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: pick it and tap Rotate, or double tap it on the board.",
+  "boardSizeHint": "The board must still fit the chosen fleet.",
+  "squareHint": "Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: tap Rotate, double tap the ship, or hold it and swipe sideways.",
   "@shipSize": {
     "placeholders": {
       "width": { "type": "int" },

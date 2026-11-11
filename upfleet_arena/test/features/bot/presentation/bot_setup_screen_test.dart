@@ -92,13 +92,37 @@ void main() {
   ) async {
     await pumpScreen(tester);
 
+    await tester.ensureVisible(find.text('Khó'));
     await tester.tap(find.text('Khó'));
     await tester.pump();
+    await tester.ensureVisible(find.text('Bắt đầu chơi'));
     await tester.tap(find.text('Bắt đầu chơi'));
     await tester.pump();
 
     expect(controller.difficulty, BotDifficulty.hard);
     expect(controller.botName, 'Máy (Khó)');
     expect(controller.profile?.displayName, 'Thuyền trưởng');
+    // The board size picker feeds the practice configuration.
+    expect(controller.config?.rows, RoomConfig.defaults.rows);
+    expect(controller.config?.columns, RoomConfig.defaults.columns);
+  });
+
+  testWidgets('the chosen board size reaches the practice config', (
+    WidgetTester tester,
+  ) async {
+    await pumpScreen(tester);
+
+    // The board card is the first one, so its steppers come first too.
+    await tester.ensureVisible(find.byIcon(Icons.add_circle_outline).first);
+    await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.add_circle_outline).at(1));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Bắt đầu chơi'));
+    await tester.tap(find.text('Bắt đầu chơi'));
+    await tester.pump();
+
+    expect(controller.config?.rows, RoomConfig.defaults.rows + 1);
+    expect(controller.config?.columns, RoomConfig.defaults.columns + 1);
   });
 }

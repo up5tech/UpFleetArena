@@ -10,17 +10,26 @@ import '../../bot/presentation/bot_labels.dart';
 import '../../profile/domain/profile.dart';
 import '../../profile/domain/profile_controller.dart';
 import '../domain/room_session_controller.dart';
+import 'board_size_steppers.dart';
 
 /// Creates a room on this device.
 ///
 /// The Host phone becomes the room authority: it opens the TCP listener,
 /// advertises the room and holds the invitation code
 /// (PLAN.md §1.5, §6.3).
-class CreateRoomScreen extends ConsumerWidget {
+class CreateRoomScreen extends ConsumerStatefulWidget {
   const CreateRoomScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CreateRoomScreen> createState() => _CreateRoomScreenState();
+}
+
+class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
+  int _rows = RoomConfig.defaults.rows;
+  int _columns = RoomConfig.defaults.columns;
+
+  @override
+  Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Profile profile = ref.watch(profileProvider);
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
@@ -78,8 +87,7 @@ class CreateRoomScreen extends ConsumerWidget {
                     ),
                     _SettingRow(
                       label: l10n.board,
-                      value:
-                          '${RoomConfig.defaults.rows}×${RoomConfig.defaults.columns}',
+                      value: '$_rows×$_columns',
                     ),
                     _SettingRow(
                       label: l10n.fleet,
@@ -102,6 +110,30 @@ class CreateRoomScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.board,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    BoardSizeSteppers(
+                      rows: _rows,
+                      columns: _columns,
+                      enabled: !busy,
+                      onRowsChanged: (int value) =>
+                          setState(() => _rows = value),
+                      onColumnsChanged: (int value) =>
+                          setState(() => _columns = value),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (session.errorMessage != null) ...<Widget>[
               const SizedBox(height: 12),
               _ErrorCard(
@@ -119,6 +151,10 @@ class CreateRoomScreen extends ConsumerWidget {
                       );
                       await controller.createRoom(
                         profile: profile,
+                        config: RoomConfig.defaults.copyWith(
+                          rows: _rows,
+                          columns: _columns,
+                        ),
                         botNameBuilder: (BotDifficulty difficulty) =>
                             botDisplayName(l10n, difficulty),
                       );

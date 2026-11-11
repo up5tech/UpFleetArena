@@ -113,8 +113,11 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get boardSizeHint => 'Bàn phải đủ chỗ cho hạm đội đã chọn.';
+
+  @override
   String get squareHint =>
-      'Chỉ tàu có số ô ghép được thành hình vuông (4, 9, 16…) mới xoay được thành khối: chọn tàu rồi bấm Xoay, hoặc chạm hai lần vào tàu trên bàn.';
+      'Chỉ tàu có số ô ghép được thành hình vuông (4, 9, 16…) mới xoay được thành khối: bấm Xoay, chạm hai lần vào tàu, hoặc nhấn giữ tàu rồi vuốt ngang.';
 
   @override
   String shipsLeftCount(int count) {

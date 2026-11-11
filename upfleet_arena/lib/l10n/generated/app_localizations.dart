@@ -296,10 +296,16 @@ abstract class AppLocalizations {
   /// **'{width}×{height}'**
   String shipSize(int width, int height);
 
+  /// No description provided for @boardSizeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The board must still fit the chosen fleet.'**
+  String get boardSizeHint;
+
   /// No description provided for @squareHint.
   ///
   /// In en, this message translates to:
-  /// **'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: pick it and tap Rotate, or double tap it on the board.'**
+  /// **'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: tap Rotate, double tap the ship, or hold it and swipe sideways.'**
   String get squareHint;
 
   /// No description provided for @shipsLeftCount.

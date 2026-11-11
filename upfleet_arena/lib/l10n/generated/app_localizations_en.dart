@@ -113,8 +113,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get boardSizeHint => 'The board must still fit the chosen fleet.';
+
+  @override
   String get squareHint =>
-      'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: pick it and tap Rotate, or double tap it on the board.';
+      'Only a ship whose cells form a square (4, 9, 16…) can be turned into a block: tap Rotate, double tap the ship, or hold it and swipe sideways.';
 
   @override
   String shipsLeftCount(int count) {
