@@ -261,9 +261,15 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     _schedulePhaseCheck();
 
     if (session.status == RoomSessionStatus.closed || snapshot == null) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) context.go('/');
+        },
+        child: Scaffold(
         appBar: AppBar(title: Text(l10n.prepareYourFleet)),
         body: Center(child: Text(l10n.roomNoLongerOpen)),
+        ),
       );
     }
 
@@ -282,7 +288,16 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     // A confirmed fleet is locked for the rest of the preparation phase.
     final bool locked = snapshot.status == RoomStatus.placement && ready;
 
-    return Scaffold(
+    // Reached with `go`, so the system back button has no page to pop: route
+    // it through the same leave flow as the AppBar arrow.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop) {
+          unawaited(_leave(context, ref.read(roomSessionControllerProvider)));
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(l10n.prepareYourFleet),
         leading: IconButton(
@@ -397,6 +412,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
             _ReadinessCard(readiness: session.readiness),
           ],
         ),
+      ),
       ),
     );
   }

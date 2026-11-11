@@ -68,7 +68,12 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
     final MatchSnapshot? snapshot = session.matchSnapshot;
 
     if (!session.isInRoom) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) context.go('/');
+        },
+        child: Scaffold(
         appBar: AppBar(title: Text(l10n.matchEnded)),
         body: Center(
           child: Padding(
@@ -86,12 +91,19 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
             ),
           ),
         ),
+        ),
       );
     }
     if (snapshot == null) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) _exit(ref.read(roomSessionControllerProvider));
+        },
+        child: Scaffold(
         appBar: AppBar(title: Text(l10n.theMatch)),
         body: Center(child: Text(l10n.matchNotStarted)),
+        ),
       );
     }
 
@@ -169,7 +181,16 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
             },
           );
 
-    return Scaffold(
+    // The match is reached with `go`, so there is no page below to pop: the
+    // system back button must run the same confirmed exit as the close icon.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop) {
+          unawaited(_exit(ref.read(roomSessionControllerProvider)));
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(l10n.theMatch),
         actions: <Widget>[
@@ -182,6 +203,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
         ],
       ),
       body: SafeArea(child: mainView),
+      ),
     );
   }
 

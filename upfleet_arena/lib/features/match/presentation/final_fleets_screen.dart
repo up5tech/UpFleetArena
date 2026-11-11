@@ -29,7 +29,12 @@ class FinalFleetsScreen extends ConsumerWidget {
     final MatchResult? result = session.matchResult;
 
     if (result == null || result.fleets.isEmpty) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) context.go('/');
+        },
+        child: Scaffold(
         appBar: AppBar(title: Text(l10n.allFleets)),
         body: Center(
           child: Padding(
@@ -51,6 +56,7 @@ class FinalFleetsScreen extends ConsumerWidget {
               ],
             ),
           ),
+        ),
         ),
       );
     }
@@ -75,7 +81,14 @@ class FinalFleetsScreen extends ConsumerWidget {
           ],
     );
 
-    return Scaffold(
+    // Reached with `go`, so the system back button has no page to pop: it
+    // returns to the result screen like the OK button does.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop) context.go('/match/result');
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(l10n.allFleets)),
       // The result screen waits behind this button, so nobody skips the
       // review by accident.
@@ -122,6 +135,7 @@ class FinalFleetsScreen extends ConsumerWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }

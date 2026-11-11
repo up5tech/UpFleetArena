@@ -37,9 +37,19 @@ abstract class SoundPlayer {
 /// Production sound player backed by `audioplayers`.
 class AssetSoundPlayer implements SoundPlayer {
   final AudioPlayer _player = AudioPlayer();
+  Future<void> _queue = Future<void>.value();
 
   @override
-  Future<void> play(GameSound sound) async {
+  Future<void> play(GameSound sound) {
+    // audioplayers_darwin 6.5.0 can leak the player-item status continuation
+    // when two setSource calls overlap (bluefireteam/audioplayers#1982).
+    // Serialize plays so only one source change is in flight at a time.
+    final Future<void> result = _queue.then((_) => _play(sound));
+    _queue = result.catchError((_) {});
+    return result;
+  }
+
+  Future<void> _play(GameSound sound) async {
     try {
       await _player.stop();
       await _player.play(AssetSource(sound.asset), volume: 0.9);
@@ -50,7 +60,10 @@ class AssetSoundPlayer implements SoundPlayer {
   }
 
   @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    await _queue;
+    await _player.dispose();
+  }
 }
 
 /// The haptic strengths used by the game.

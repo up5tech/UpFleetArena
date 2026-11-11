@@ -21,7 +21,12 @@ class MatchResultScreen extends ConsumerWidget {
     final MatchResult? result = session.matchResult;
 
     if (result == null) {
-      return Scaffold(
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? _) {
+          if (!didPop) context.go('/');
+        },
+        child: Scaffold(
         appBar: AppBar(title: Text(l10n.matchResult)),
         body: Center(
           child: Padding(
@@ -44,6 +49,7 @@ class MatchResultScreen extends ConsumerWidget {
             ),
           ),
         ),
+        ),
       );
     }
 
@@ -52,7 +58,16 @@ class MatchResultScreen extends ConsumerWidget {
         ? null
         : result.standingOf(viewerPlayerId);
 
-    return Scaffold(
+    // Reached with `go`, so the system back button has no page to pop: route
+    // it through the same leave flow as the return-home button.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        if (!didPop) {
+          _returnHome(context, ref, session);
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(l10n.matchResult),
         automaticallyImplyLeading: false,
@@ -122,6 +137,7 @@ class MatchResultScreen extends ConsumerWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }
