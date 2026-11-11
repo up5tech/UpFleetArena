@@ -114,8 +114,6 @@ void main() {
       ShipPlacement(
         shipId: 'ship-4',
         length: 2,
-        // The Standard fleet seats this one as a 2×2 block.
-        span: 2,
         orientation: ShipOrientation.horizontal,
         row: 6,
         column: 0,

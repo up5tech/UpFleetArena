@@ -296,6 +296,12 @@ abstract class AppLocalizations {
   /// **'{width}×{height}'**
   String shipSize(int width, int height);
 
+  /// No description provided for @squareShape.
+  ///
+  /// In en, this message translates to:
+  /// **'Square'**
+  String get squareShape;
+
   /// No description provided for @shipsLeftCount.
   ///
   /// In en, this message translates to:

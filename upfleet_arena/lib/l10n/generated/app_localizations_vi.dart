@@ -113,6 +113,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get squareShape => 'Vuông';
+
+  @override
   String shipsLeftCount(int count) {
     return 'còn $count tàu';
   }

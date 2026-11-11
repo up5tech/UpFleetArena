@@ -10,11 +10,13 @@ import 'package:upfleet_arena/game_engine/placement/placement_validator.dart';
 import 'package:upfleet_arena/shared/models/placement_models.dart';
 import 'package:upfleet_arena/shared/models/room_models.dart';
 
-/// A square ship covers length × span cells instead of a single line.
+/// A ship whose cells form a square may be placed as a block instead of a line.
 void main() {
   group('square ships', () {
-    test('a 2×2 ship covers four cells', () {
-      const ShipPlacement square = ShipPlacement(
+    const BoardSize board = BoardSize(rows: 10, columns: 10);
+
+    test('a 2×2 block covers four cells', () {
+      const ShipPlacement block = ShipPlacement(
         shipId: 'ship-1',
         length: 2,
         span: 2,
@@ -23,23 +25,23 @@ void main() {
         column: 1,
       );
 
-      expect(square.cells, <CellCoord>[
+      expect(block.cells, <CellCoord>[
         const CellCoord(1, 1),
         const CellCoord(1, 2),
         const CellCoord(2, 1),
         const CellCoord(2, 2),
       ]);
-      expect(square.isSquare, isTrue);
-      // A square looks the same in both directions.
-      expect(square.rotated(), square);
+      expect(block.isSquare, isTrue);
+      // A block looks the same in both directions.
+      expect(block.rotated(), block);
     });
 
-    test('a square ship sinks only when its last cell is hit', () {
+    test('a block sinks only when its last cell is hit', () {
       final PlayerBoard board = PlayerBoard(
         playerId: 'alice',
         ships: const <ShipPlacement>[
           ShipPlacement(
-            shipId: 'square',
+            shipId: 'block',
             length: 2,
             span: 2,
             orientation: ShipOrientation.horizontal,
@@ -64,30 +66,95 @@ void main() {
         resolveShot(board, const CellCoord(1, 1)).result,
         ShotResult.shipSunk,
       );
-      expect(board.ships['square']!.isSunk, isTrue);
+      expect(board.ships['block']!.isSunk, isTrue);
       expect(board.isEliminated, isFalse);
     });
 
-    test('the standard preset seats a 2×2 block', () {
-      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
-
-      expect(profile.shipCount, 5);
-      expect(profile.cellsOf('ship-4'), 4);
-      expect(profile.totalCells, 16);
-      expect(FleetPreset.standard.totalCells, 16);
-      expect(FleetPreset.standard.shipSummary, '4, 3, 3, 2×2, 2');
+    test('only perfect squares can be drawn as a block', () {
+      expect(FleetProfile.squareSideFor(4), 2);
+      expect(FleetProfile.squareSideFor(9), 3);
+      expect(FleetProfile.squareSideFor(16), 4);
+      expect(FleetProfile.squareSideFor(8), isNull);
+      expect(FleetProfile.squareSideFor(1), isNull);
     });
 
-    test('a line cannot be placed as a square', () {
-      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.small);
+    test('a preset states the cells, not the shape', () {
+      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
+
+      expect(FleetPreset.standard.totalCells, 14);
+      expect(FleetPreset.standard.shipSummary, '4, 3, 3, 2, 2');
+      // The four-cell ship can be a 2×2 block, the three-cell ones cannot.
+      expect(profile.cellsOf('ship-1'), 4);
+      expect(profile.squareSideOf('ship-1'), 2);
+      expect(profile.squareSideOf('ship-2'), isNull);
+    });
+
+    test('a four-cell ship is accepted as a line or as a block', () {
+      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
+
+      expect(
+        validateShipPlacement(
+          board: board,
+          profile: profile,
+          ships: const <ShipPlacement>[],
+          candidate: const ShipPlacement(
+            shipId: 'ship-1',
+            length: 4,
+            orientation: ShipOrientation.horizontal,
+            row: 0,
+            column: 0,
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        validateShipPlacement(
+          board: board,
+          profile: profile,
+          ships: const <ShipPlacement>[],
+          candidate: const ShipPlacement(
+            shipId: 'ship-1',
+            length: 2,
+            span: 2,
+            orientation: ShipOrientation.horizontal,
+            row: 6,
+            column: 0,
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('a block that changes the cell count is rejected', () {
+      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
 
       final PlacementError? error = validateShipPlacement(
-        board: const BoardSize(rows: 10, columns: 10),
+        board: board,
         profile: profile,
         ships: const <ShipPlacement>[],
         candidate: const ShipPlacement(
           shipId: 'ship-1',
           length: 3,
+          span: 2,
+          orientation: ShipOrientation.horizontal,
+          row: 0,
+          column: 0,
+        ),
+      );
+
+      expect(error?.problem, PlacementProblem.wrongLength);
+    });
+
+    test('a three-cell ship cannot be a block', () {
+      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
+
+      final PlacementError? error = validateShipPlacement(
+        board: board,
+        profile: profile,
+        ships: const <ShipPlacement>[],
+        candidate: const ShipPlacement(
+          shipId: 'ship-2',
+          length: 1,
           span: 3,
           orientation: ShipOrientation.horizontal,
           row: 0,
@@ -98,47 +165,48 @@ void main() {
       expect(error?.problem, PlacementProblem.wrongShape);
     });
 
-    test('a square ship is accepted when it fits', () {
-      final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
+    test('a nine-cell ship can be a 3×3 block', () {
+      const FleetProfile profile = FleetProfile(<int>[9, 3]);
 
-      final PlacementError? error = validateShipPlacement(
-        board: const BoardSize(rows: 10, columns: 10),
-        profile: profile,
-        ships: const <ShipPlacement>[],
-        candidate: const ShipPlacement(
-          shipId: 'ship-4',
-          length: 2,
-          span: 2,
-          orientation: ShipOrientation.horizontal,
-          row: 0,
-          column: 0,
+      expect(profile.squareSideOf('ship-1'), 3);
+      expect(
+        validateShipPlacement(
+          board: board,
+          profile: profile,
+          ships: const <ShipPlacement>[],
+          candidate: const ShipPlacement(
+            shipId: 'ship-1',
+            length: 3,
+            span: 3,
+            orientation: ShipOrientation.horizontal,
+            row: 2,
+            column: 2,
+          ),
         ),
+        isNull,
       );
-
-      expect(error, isNull);
     });
 
-    test('automatic placement seats every block with its four cells', () {
+    test('automatic placement keeps every ship a line', () {
       final FleetProfile profile = FleetProfile.fromPreset(FleetPreset.standard);
 
       final List<ShipPlacement> ships = autoPlaceFleet(
-        board: const BoardSize(rows: 10, columns: 10),
+        board: board,
         profile: profile,
         random: Random(7),
       );
 
       expect(ships.length, profile.shipCount);
-      final ShipPlacement square = ships.firstWhere(
-        (ShipPlacement ship) => ship.isSquare,
+      expect(ships.every((ShipPlacement ship) => ship.isSquare), isFalse);
+      expect(
+        ships.expand((ShipPlacement ship) => ship.cells).toSet().length,
+        profile.totalCells,
       );
-      expect(square.cells.length, 4);
-      expect(ships.expand((ShipPlacement ship) => ship.cells).toSet().length,
-          profile.totalCells);
     });
 
-    test('the wire form keeps the span', () {
-      const ShipPlacement square = ShipPlacement(
-        shipId: 'ship-4',
+    test('the wire form keeps the block', () {
+      const ShipPlacement block = ShipPlacement(
+        shipId: 'ship-1',
         length: 2,
         span: 2,
         orientation: ShipOrientation.vertical,
@@ -147,11 +215,11 @@ void main() {
       );
 
       final ShipLayout layout = ShipLayout.fromJson(
-        ShipLayout.fromPlacement(square).toJson(),
+        ShipLayout.fromPlacement(block).toJson(),
       );
 
       expect(layout.span, 2);
-      expect(layout.toPlacement(), square);
+      expect(layout.toPlacement(), block);
     });
   });
 }

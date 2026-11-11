@@ -133,8 +133,7 @@ void main() {
         ship(shipId: 'ship-1', length: 4, row: 0, column: 0),
         ship(shipId: 'ship-2', length: 3, row: 2, column: 0),
         ship(shipId: 'ship-3', length: 3, row: 4, column: 0),
-        // The Standard fleet seats its fourth ship as a 2×2 block.
-        ship(shipId: 'ship-4', length: 2, span: 2, row: 6, column: 0),
+        ship(shipId: 'ship-4', length: 2, row: 6, column: 0),
         ship(shipId: 'ship-5', length: 2, row: 8, column: 0),
       ];
 

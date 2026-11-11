@@ -113,6 +113,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get squareShape => 'Square';
+
+  @override
   String shipsLeftCount(int count) {
     return '$count ships left';
   }

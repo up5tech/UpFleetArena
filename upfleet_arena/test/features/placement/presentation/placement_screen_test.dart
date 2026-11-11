@@ -162,6 +162,50 @@ void main() {
     expect(find.text('That ship does not fit on the board.'), findsOneWidget);
   });
 
+  testWidgets('a four-cell ship can be sent as a 2×2 block', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('4 cells'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Square'));
+    await tester.pump();
+    // The chip shows the shape that is about to be placed.
+    expect(find.text('2×2'), findsOneWidget);
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.tapAt(Offset(board.left + cell * 3, board.top + cell * 3));
+    await tester.pump();
+
+    final ShipPlacement sent = controller.sentLayouts.single.single;
+    expect(sent.length, 2);
+    expect(sent.span, 2);
+    expect(sent.isSquare, isTrue);
+    expect(sent.cells, hasLength(4));
+  });
+
+  testWidgets('a three-cell ship is not offered the square shape', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('3 cells').first);
+    await tester.pump();
+
+    final OutlinedButton square = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Square'),
+    );
+    expect(square.onPressed, isNull);
+  });
+
   testWidgets('auto place asks the host to fill the fleet', (
     WidgetTester tester,
   ) async {

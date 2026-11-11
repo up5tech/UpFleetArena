@@ -65,7 +65,6 @@ List<ShipPlacement> fleetAt(int columnOffset) => [
     ShipPlacement(
       shipId: 'ship-${index + 1}',
       length: length,
-      // The Standard fleet seats its fourth ship as a 2×2 block.
       span: FleetPreset.standard.spanAt(index),
       orientation: ShipOrientation.horizontal,
       row: index * 2,
@@ -406,8 +405,7 @@ void main() {
         'hit',
       );
       expect(f.match.boards['bob']!.sunkCount, 1);
-      // Sixteen cells, two of them the sunk ship took.
-      expect(f.match.boards['bob']!.remainingCells, 14);
+      expect(f.match.boards['bob']!.remainingCells, 12);
     },
   );
 
@@ -871,9 +869,8 @@ void main() {
         await f.shoot(f.host, row: cell.row, column: cell.column);
         expect(f.room.stateVersion, version + 1);
         if (i + 1 < cells.length) {
-          // Alice fires into open water so only her fleet takes damage, and
-          // never at the same cell twice.
-          await f.shoot('alice', row: i.isEven ? 9 : 5, column: i ~/ 2);
+          // Alice fires into open water so only her fleet takes damage.
+          await f.shoot('alice', row: 9, column: i);
         }
       }
       expect(f.room.status, RoomStatus.finished);
