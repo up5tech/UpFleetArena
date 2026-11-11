@@ -40,10 +40,11 @@ class _FakeSessionController extends RoomSessionController {
   }
 }
 
-RoomSnapshot _snapshot() => const RoomSnapshot(
-  roomId: 'room-1',
-  status: RoomStatus.lobby,
-  config: RoomConfig.defaults,
+RoomSnapshot _snapshot({RoomConfig config = RoomConfig.defaults}) =>
+    RoomSnapshot(
+      roomId: 'room-1',
+      status: RoomStatus.lobby,
+      config: config,
   players: <PlayerSummary>[
     PlayerSummary(
       playerId: 'host-1',
@@ -58,19 +59,39 @@ RoomSnapshot _snapshot() => const RoomSnapshot(
   stateVersion: 1,
 );
 
-RoomSessionState _session({List<ShipLayout> ships = const <ShipLayout>[]}) =>
-    RoomSessionState(
-      role: RoomRole.host,
-      status: RoomSessionStatus.inRoom,
-      snapshot: _snapshot(),
-      playerId: 'host-1',
-      placement: PlacementState(
-        playerId: 'host-1',
-        ships: ships,
-        ready: false,
-        stateVersion: 1,
-      ),
-    );
+RoomSessionState _session({
+  List<ShipLayout> ships = const <ShipLayout>[],
+  RoomConfig config = RoomConfig.defaults,
+}) => RoomSessionState(
+  role: RoomRole.host,
+  status: RoomSessionStatus.inRoom,
+  snapshot: _snapshot(config: config),
+  playerId: 'host-1',
+  placement: PlacementState(
+    playerId: 'host-1',
+    ships: ships,
+    ready: false,
+    stateVersion: 1,
+  ),
+);
+
+/// The placement of a Standard fleet, as Auto Place would leave it.
+List<ShipLayout> _standardFleet() => <ShipLayout>[
+  for (final (int index, int length) in <(int, int)>[
+    (0, 4),
+    (2, 3),
+    (4, 3),
+    (6, 2),
+    (8, 2),
+  ])
+    ShipLayout(
+      shipId: 'ship-${index ~/ 2 + 1}',
+      length: length,
+      orientation: ShipOrientation.horizontal,
+      row: index,
+      column: 0,
+    ),
+];
 
 Widget _app(_FakeSessionController controller) {
   return ProviderScope(
@@ -189,6 +210,30 @@ void main() {
     expect(sent.cells, hasLength(4));
   });
 
+  testWidgets('the screen explains which ships can be a square', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    expect(find.textContaining('form a square'), findsOneWidget);
+  });
+
+  testWidgets('a fleet without square-capable ships shows no square hint', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(
+        config: RoomConfig.defaults.copyWith(fleetPreset: FleetPreset.small),
+      ),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    expect(find.textContaining('form a square'), findsNothing);
+  });
+
   testWidgets('a three-cell ship is not offered the square shape', (
     WidgetTester tester,
   ) async {
@@ -204,6 +249,51 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Square'),
     );
     expect(square.onPressed, isNull);
+  });
+
+  testWidgets('a ship can be moved after the fleet was filled automatically', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    // The last two-cell ship sits at row 8 and moves to the free cell at 8/8.
+    await tester.tap(find.text('2 cells').last);
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.tapAt(Offset(board.left + cell * 8, board.top + cell * 8));
+    await tester.pump();
+
+    final ShipPlacement moved = controller.sentLayouts.last.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-5',
+    );
+    expect(moved.row, 8);
+    expect(moved.column, 8);
+  });
+
+  testWidgets('dragging a placed ship moves it', (WidgetTester tester) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(ships: _standardFleet()),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.dragFrom(
+      Offset(board.left + cell * 0.5, board.top + cell * 6.5),
+      Offset(cell * 8, cell * 2),
+    );
+    await tester.pump();
+
+    final ShipPlacement moved = controller.sentLayouts.last.firstWhere(
+      (ShipPlacement ship) => ship.shipId == 'ship-4',
+    );
+    expect(moved.row, 8);
+    expect(moved.column, 8);
   });
 
   testWidgets('auto place asks the host to fill the fleet', (

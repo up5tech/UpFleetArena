@@ -302,6 +302,12 @@ abstract class AppLocalizations {
   /// **'Square'**
   String get squareShape;
 
+  /// No description provided for @squareHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only a ship whose cells form a square (4, 9, 16…) can be placed as a block. Pick the ship, then tap Square.'**
+  String get squareHint;
+
   /// No description provided for @shipsLeftCount.
   ///
   /// In en, this message translates to:

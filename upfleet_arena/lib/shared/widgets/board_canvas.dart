@@ -27,6 +27,7 @@ class BoardCanvas extends StatelessWidget {
     this.onCellPreview,
     this.onPreviewCleared,
     this.onCellCommit,
+    this.onDragStart,
     this.onDragEnd,
   });
 
@@ -61,6 +62,12 @@ class BoardCanvas extends StatelessWidget {
 
   /// Called while the finger moves over the board.
   final void Function(CellCoord cell)? onCellPreview;
+
+  /// Called when a drag starts on a cell, before the first preview.
+  ///
+  /// A tap never fires it: the placement screen uses it to pick up the ship
+  /// under the finger so an existing fleet stays editable.
+  final void Function(CellCoord cell)? onDragStart;
 
   /// Called when the finger leaves the board or the gesture is cancelled.
   final VoidCallback? onPreviewCleared;
@@ -113,7 +120,10 @@ class BoardCanvas extends StatelessWidget {
                 onTapCancel: onPreviewCleared,
                 onPanStart: (DragStartDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onCellPreview?.call(cell);
+                  if (cell != null) {
+                    onDragStart?.call(cell);
+                    onCellPreview?.call(cell);
+                  }
                 },
                 onPanUpdate: (DragUpdateDetails details) {
                   final CellCoord? cell = cellAt(details.localPosition);

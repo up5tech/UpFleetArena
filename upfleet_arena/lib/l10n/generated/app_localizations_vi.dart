@@ -116,6 +116,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get squareShape => 'Vuông';
 
   @override
+  String get squareHint =>
+      'Chỉ tàu có số ô ghép được thành hình vuông (4, 9, 16…) mới đặt được thành khối. Chọn tàu rồi bấm Vuông.';
+
+  @override
   String shipsLeftCount(int count) {
     return 'còn $count tàu';
   }

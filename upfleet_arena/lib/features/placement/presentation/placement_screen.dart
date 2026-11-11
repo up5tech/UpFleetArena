@@ -215,6 +215,7 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               previewIsValid: _previewIsValid,
               onCellPreview: _handlePreview,
               onCellCommit: _handleCommit,
+              onDragStart: _handleDragStart,
               onDragEnd: _handleDragEnd,
             ),
             const SizedBox(height: 16),
@@ -232,6 +233,18 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               lengthOf: _lengthOf,
               spanOf: _spanOf,
             ),
+            if (profile.shipIds.any(
+              (String shipId) => profile.squareSideOf(shipId) != null,
+            )) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                l10n.squareHint,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.textSecondary,
+                  height: 1.35,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             // A Wrap keeps every label on one line: with fixed thirds the
             // longer Vietnamese labels ("Hoàn tác", "Tự động") broke
@@ -308,6 +321,25 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     setState(() => _previewCell = cell);
   }
 
+  /// Picks up the ship under the finger when a drag starts with no selection.
+  ///
+  /// Auto Place fills the whole fleet, but the player may still move any ship:
+  /// dragging a placed one carries it to the cell where the finger is lifted.
+  void _handleDragStart(CellCoord cell) {
+    if (_selectedShipId != null) return;
+    final ShipPlacement? ship = _shipAt(cell);
+    if (ship == null) return;
+    setState(() => _selectedShipId = ship.shipId);
+  }
+
+  /// The ship of the own fleet that lies on [cell], if any.
+  ShipPlacement? _shipAt(CellCoord cell) {
+    for (final ShipPlacement ship in _ships) {
+      if (ship.cells.contains(cell)) return ship;
+    }
+    return null;
+  }
+
   void _handleDragEnd() {
     final CellCoord? cell = _previewCell;
     if (cell == null) return;
@@ -364,12 +396,8 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
 
   /// Selects the ship that lies on the tapped cell.
   void _selectShipAt(CellCoord cell) {
-    for (final ShipPlacement ship in _ships) {
-      if (ship.cells.contains(cell)) {
-        _selectShip(ship.shipId);
-        return;
-      }
-    }
+    final ShipPlacement? ship = _shipAt(cell);
+    if (ship != null) _selectShip(ship.shipId);
   }
 
   void _rotate() {
@@ -507,6 +535,7 @@ class _BoardSection extends StatelessWidget {
     required this.previewIsValid,
     required this.onCellPreview,
     required this.onCellCommit,
+    required this.onDragStart,
     required this.onDragEnd,
   });
 
@@ -517,6 +546,7 @@ class _BoardSection extends StatelessWidget {
   final bool previewIsValid;
   final void Function(CellCoord cell) onCellPreview;
   final void Function(CellCoord cell) onCellCommit;
+  final void Function(CellCoord cell) onDragStart;
   final VoidCallback onDragEnd;
 
   @override
@@ -535,6 +565,7 @@ class _BoardSection extends StatelessWidget {
             previewIsValid: previewIsValid,
             onCellPreview: onCellPreview,
             onCellCommit: onCellCommit,
+            onDragStart: onDragStart,
             onDragEnd: onDragEnd,
           ),
         );
