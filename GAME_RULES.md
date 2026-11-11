@@ -40,16 +40,31 @@ and timers.
 
 ## 2. Battlefield model
 
-Each player owns **one private board**. There is no shared map in the MVP.
+The whole room fights on **one shared battle map**. Every player's fleet and
+every shot of every player live on that single board: the map shows the own
+hulls and the fire of everybody, each mark in the colour of its shooter. The
+mode is recorded in `AppConfig.sharedBattleMap`.
 
-- Every player places their own fleet on their own grid.
-- On a turn, the active player selects a living opponent, then a coordinate on
-  that opponent's grid.
-- The target player sees the impact on their own board.
-- The attacker sees the result of their own shot and records it in their
-  attack history for that target.
-- Other players receive a limited public activity event only — never ship
-  positions or exact coordinates.
+- Every player places their own fleet on their own grid; all grids use the
+  same coordinate space and are overlaid on the one battle map.
+- The active player fires at **one cell**, with no target selection. The Host
+  resolves that shot against **every living opponent** at the same cell.
+- Each target sees the impact on its own board; the attacker sees the result
+  of the volley against every fleet.
+- The attacker records the shot in its attack history for each opponent.
+- Other players receive a limited public activity event only — no ship
+  positions in the activity feed.
+- Every mark on the map carries the shooter who fired it, so the client can
+  paint one colour per player.
+- The map is public: the room sees where every shot landed. A hit therefore
+  tells the room that at least one fleet has a ship on that cell, so the hits
+  on a fleet become common knowledge. This is the deliberate trade-off of the
+  shared map — the **layout** of a fleet stays with the Host and its owner,
+  but the hits on it are public.
+- Once a ship is sunk, its hull becomes public: the room sees its outline on
+  the shared map, in the colour of the player who owned it. This adds nothing
+  new — every cell of a sunk ship had already been hit, and the hits are
+  public — and it lets the room read whose fleet lost the ship.
 - The Host stores every complete fleet layout because it must validate shots.
   A curious or malicious Host can therefore inspect hidden fleet data. This is
   a documented trust limitation of a no-backend, participant-hosted design.
@@ -119,10 +134,15 @@ Rules:
 - Turns proceed in a circular order.
 - One shot per turn, whether the shot hits or misses. A hit grants no extra
   shot in the MVP.
-- The active player may target any living opponent except themselves.
-- A cell may be fired at only once per attacker-target pair. The Host
-  validates this.
-- The Host resolves a shot to exactly one of `MISS`, `HIT` or `SHIP_SUNK`.
+- The active player fires at one cell of the shared map; there is no target
+  to select. The Host resolves the shot against every living opponent.
+- A cell may be fired at only once **per attacker**. Two players may fire at
+  the same cell: the marks of both shooters are shown, each in the colour of
+  its shooter.
+- The Host resolves the shot for each living target to exactly one of
+  `MISS`, `HIT` or `SHIP_SUNK`. The attacker's statistics count the shot
+  once: it is a hit when at least one fleet had a ship on the cell, and every
+  ship it sank is counted.
 - A player is eliminated when every cell of every ship in their fleet has
   been hit.
 - When one player remains alive, that player wins and the match ends.

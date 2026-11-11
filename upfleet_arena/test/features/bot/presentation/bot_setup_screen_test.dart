@@ -16,6 +16,7 @@ class _FakeSessionController extends RoomSessionController {
   BotDifficulty? difficulty;
   String? botName;
   Profile? profile;
+  RoomConfig? config;
 
   @override
   RoomSessionState build() => const RoomSessionState();
@@ -23,13 +24,20 @@ class _FakeSessionController extends RoomSessionController {
   @override
   Future<void> startPractice({
     required Profile profile,
-    required BotDifficulty difficulty,
-    required String botName,
+    BotDifficulty difficulty = BotDifficulty.medium,
+    String? botName,
+    int? botCount,
+    List<BotDifficulty>? difficulties,
+    List<String>? botNames,
+    List<BotDifficulty>? botDifficulties,
+    List<String>? opponentNames,
+    int? opponentCount,
     RoomConfig? config,
   }) async {
     this.profile = profile;
     this.difficulty = difficulty;
     this.botName = botName;
+    this.config = config;
   }
 }
 

@@ -126,11 +126,24 @@ class AppConfig {
   /// A hit does not grant an extra shot in the MVP.
   static const bool extraShotOnHit = false;
 
-  /// The active player may target any living opponent.
-  static const String targetMode = 'ANY_LIVING_OPPONENT';
+  /// The active player fires at every living opponent at once.
+  ///
+  /// The shot needs no target: it is resolved against all living fleets on the
+  /// same cell of the shared map.
+  static const String targetMode = 'ALL_LIVING_OPPONENTS';
 
-  /// Each attacker may fire at a given target cell only once.
-  static const bool repeatedShotOnSameCellPerAttackerTarget = false;
+  /// Each attacker may fire at a given cell of the shared map only once.
+  static const bool repeatedShotOnSameCellPerAttacker = false;
+
+  /// The whole room fights on one shared battle map.
+  ///
+  /// Every player and their own fleet live on the same board: the map shows
+  /// the own hulls and the fire of everybody, each mark in the colour of its
+  /// shooter. A shot is resolved against every living opponent, so a hit
+  /// tells the room that at least one fleet has a ship on that cell. This is
+  /// the deliberate trade-off of the shared map: the fleet layout stays with
+  /// the Host, but the hits on it become public (GAME_RULES.md §2).
+  static const bool sharedBattleMap = true;
 
   // --------------------------------------------------------- reconnection
 

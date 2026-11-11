@@ -46,13 +46,13 @@ flutter run -d <device-id>
 
 | # | Step | Expected result |
 |---|---|---|
-| 2.1 | Active player taps a target chip | The opponent's board opens; only their own shots are marked |
+| 2.1 | Active player double-taps a cell of the shared map | The shot is resolved against every living opponent at once, and no target has to be chosen |
 | 2.2 | Tap an empty cell | The cell is highlighted and shows its coordinate (e.g. `C4`) |
 | 2.3 | Tap **Fire at this cell** | The button reads "Waiting for host…" for a moment, then the result appears |
-| 2.4 | A miss | A small dot on the attacker's board and "Your shot missed." |
-| 2.5 | A hit | A cross on the attacker's board and "Your shot hit a ship." |
-| 2.6 | The last cell of a ship | A ring on the attacker's board and "Your shot sank a ship." |
-| 2.7 | The target's device | Shows the impact on their own board: "A shot hit one of your ships." |
+| 2.4 | A miss | A hollow ring appears only on the shooter's map; the miss is invisible on every other device |
+| 2.5 | A hit | A filled dot in the colour of the shooter on the shared map |
+| 2.6 | The last cell of a ship | A ring with a hole in the colour of the shooter on the shared map |
+| 2.7 | The target's device | Shows the impact on their own board, in the colour of the shooter |
 | 2.8 | The turn | Moves to the next player automatically after one shot, hit or miss |
 
 ---
@@ -98,10 +98,11 @@ flutter run -d <device-id>
 
 | # | Step | Expected result |
 |---|---|---|
-| 6.1 | Player A fires at player B | A sees only their own shots on B's board, never B's ships |
-| 6.2 | Player C, who was not involved | Sees only "A hit B" style activity — no coordinates |
-| 6.3 | Player B | Sees the impact on their own fleet and their own ships |
-| 6.4 | Compare the *Your board* tabs | Each device shows only its own fleet |
+| 6.1 | Player A fires at a cell | A sees the one shared map with the fire of every player, never an opponent's ships |
+| 6.2 | Player C, who is still living | Sees the same marks on the one map, but still never any opponent's ships |
+| 6.3 | Every living opponent of player A | Each sees the impact on their own fleet and their own hulls |
+| 6.4 | Compare the hulls drawn on the map | Each device draws only its own fleet on the shared map |
+| 6.5 | The colour legend under the map | Every player has one colour, the same on every device |
 
 ---
 

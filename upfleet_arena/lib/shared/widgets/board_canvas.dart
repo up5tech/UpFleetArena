@@ -20,6 +20,7 @@ class BoardCanvas extends StatelessWidget {
     required this.ships,
     this.shots = const <CellCoord>[],
     this.misses = const <CellCoord>[],
+    this.shotColors = const <CellCoord, Color>{},
     this.sunkShips = const <String>{},
     this.preview,
     this.previewIsValid = true,
@@ -43,6 +44,11 @@ class BoardCanvas extends StatelessWidget {
 
   /// The cells that were fired at without hitting a ship.
   final List<CellCoord> misses;
+
+  /// The colour of a hit, per cell.
+  ///
+  /// The own board uses it to show which player hit which cell.
+  final Map<CellCoord, Color> shotColors;
 
   /// The ships that were sunk: their hulls are drawn in the sunk colour.
   final Set<String> sunkShips;
@@ -125,6 +131,7 @@ class BoardCanvas extends StatelessWidget {
                     ships: ships,
                     shots: shots,
                     misses: misses,
+                    shotColors: shotColors,
                     sunkShips: sunkShips,
                     preview: preview,
                     previewIsValid: previewIsValid,
@@ -147,6 +154,7 @@ class BoardPainter extends CustomPainter {
     required this.ships,
     this.shots = const <CellCoord>[],
     this.misses = const <CellCoord>[],
+    this.shotColors = const <CellCoord, Color>{},
     this.sunkShips = const <String>{},
     this.preview,
     this.previewIsValid = true,
@@ -166,6 +174,9 @@ class BoardPainter extends CustomPainter {
 
   /// The cells that were fired at without hitting a ship.
   final List<CellCoord> misses;
+
+  /// The colour of a hit, per cell.
+  final Map<CellCoord, Color> shotColors;
 
   /// The ships that were sunk.
   final Set<String> sunkShips;
@@ -245,7 +256,7 @@ class BoardPainter extends CustomPainter {
     for (final CellCoord cell in shots) {
       final Offset center = Offset(offsetX + (cell.column + .5) * cellSize, offsetY + (cell.row + .5) * cellSize);
       final Paint mark = Paint()
-        ..color = AppTheme.hit
+        ..color = shotColors[cell] ?? AppTheme.hit
         ..strokeWidth = math.max(2, cellSize * .12)
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
@@ -309,6 +320,7 @@ class BoardPainter extends CustomPainter {
       oldDelegate.ships != ships ||
       oldDelegate.shots != shots ||
       oldDelegate.misses != misses ||
+      oldDelegate.shotColors != shotColors ||
       oldDelegate.sunkShips != sunkShips ||
       oldDelegate.preview != preview ||
       oldDelegate.previewIsValid != previewIsValid;

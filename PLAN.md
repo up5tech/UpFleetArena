@@ -1498,8 +1498,8 @@ combat:
   turnDurationSeconds: 30
   shotsPerTurn: 1
   extraShotOnHit: false
-  targetMode: ANY_LIVING_OPPONENT
-  repeatedShotOnSameCellPerAttackerTarget: false
+  targetMode: ALL_LIVING_OPPONENTS
+  repeatedShotOnSameCellPerAttacker: false
 reconnection:
   nonHostGracePeriodSeconds: 30
   hostReconnectSupported: false

@@ -24,6 +24,7 @@ class BotSetupScreen extends ConsumerStatefulWidget {
 
 class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
   BotDifficulty _difficulty = BotDifficulty.medium;
+  int _botCount = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -35,12 +36,14 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.playVsComputer)),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          children: <Widget>[
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: <Widget>[
                     Text(
@@ -80,10 +83,48 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
             const SizedBox(height: 12),
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
+                    Text(
+                      l10n.computerOpponents,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            l10n.computerCount,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l10n.decreaseLabel(l10n.computerCount),
+                          onPressed: _botCount > 1
+                              ? () => setState(() => _botCount--)
+                              : null,
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            '$_botCount',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l10n.increaseLabel(l10n.computerCount),
+                          onPressed: _botCount < RoomConfig.defaults.maxPlayers - 1
+                              ? () => setState(() => _botCount++)
+                              : null,
+                          icon: const Icon(Icons.add_circle_outline),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     Text(
                       l10n.chooseDifficulty,
                       style: Theme.of(context).textTheme.titleMedium,
@@ -105,11 +146,7 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              l10n.practiceHint,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppTheme.textSecondary, height: 1.35),
-            ),
+
             if (session.errorMessage != null) ...<Widget>[
               const SizedBox(height: 12),
               Text(
@@ -117,7 +154,7 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
                 style: const TextStyle(color: AppTheme.danger),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: busy || !profile.isComplete
                   ? null
@@ -140,6 +177,7 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
                 ),
               ),
           ],
+          ),
         ),
       ),
     );
@@ -154,6 +192,10 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
           profile: profile,
           difficulty: _difficulty,
           botName: botName,
+          config: RoomConfig.defaults.copyWith(
+            botCount: _botCount,
+            botDifficulty: _difficulty,
+          ),
         );
     if (!mounted) return;
     final RoomSessionState session = ref.read(roomSessionControllerProvider);

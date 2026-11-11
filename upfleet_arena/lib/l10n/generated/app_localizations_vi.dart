@@ -249,7 +249,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Sắp xếp hạm đội riêng trước khi trận bắt đầu';
 
   @override
-  String get battleSubtitle => 'Chiến đấu theo lượt trên bàn mục tiêu';
+  String get battleSubtitle => 'Chiến đấu theo lượt trên một bản đồ chung';
 
   @override
   String get profileAndSettings => 'Hồ sơ & Cài đặt';
@@ -655,8 +655,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noTargetsLeft => 'Không còn ai để bắn.';
 
   @override
-  String get boardLegend =>
-      'Tàu mờ: hạm đội của bạn · Chấm: trượt · Chấm đầy: trúng · Vòng: chìm';
+  String get sharedMapTitle => 'Bản đồ chung';
+
+  @override
+  String get legendHit => 'trúng';
+
+  @override
+  String get legendSunk => 'chìm';
+
+  @override
+  String get legendMiss => 'trượt của bạn';
+
+  @override
+  String get closeMatch => 'Rời trận';
 
   @override
   String selectedCell(String cell) {
@@ -672,10 +683,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get waitingForHost => 'Đang chờ chủ phòng…';
 
   @override
-  String get doubleTapToFire => 'Nhấn đúp vào một ô để bắn.';
-
-  @override
-  String get waitForYourTurn => 'Chờ đến lượt bạn';
+  String get doubleTapToFire => 'Nhấn đúp một ô để bắn vào tất cả đối thủ.';
 
   @override
   String get yourTurn => 'Lượt của bạn';
@@ -729,7 +737,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get ownBoardHint =>
-      'Các ô đỏ là những phát trúng hạm đội của bạn. Chỉ bạn và chủ phòng thấy bàn này.';
+      'Các ô màu là những phát trúng hạm đội của bạn, theo màu của người đã bắn. Chỉ bạn và chủ phòng thấy bàn này.';
 
   @override
   String get turnOrder => 'Thứ tự lượt';
@@ -807,11 +815,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get spectatorHint =>
-      'Người xem không thấy tọa độ và không thấy hạm đội đối phương. Bàn của bạn vẫn khả dụng ở tab kế tiếp.';
+      'Người xem không thấy tọa độ và không thấy hạm đội đối phương. Hạm đội của bạn vẫn hiển thị bên dưới.';
 
   @override
-  String targetBoardSemantics(int rows, int columns) {
-    return 'Bàn mục tiêu, $rows hàng và $columns cột. Chạm một ô để chọn, nhấn đúp để bắn.';
+  String battleMapSemantics(int rows, int columns) {
+    return 'Bản đồ chiến đấu cùng hạm đội của bạn, $rows hàng và $columns cột. Chạm một ô để chọn, nhấn đúp để bắn.';
   }
 
   @override

@@ -25,47 +25,15 @@ enum BotDifficulty {
   String get wire => name;
 }
 
-/// What a computer opponent knows about one opposing board.
-///
-/// It holds exactly what a person would have written down: the cells that
-/// were already fired at and their results. The hidden fleet of the target is
-/// never part of it, so a bot cannot cheat
-/// (GAME_RULES.md §2 "Battlefield model").
-class BotTargetKnowledge {
-  const BotTargetKnowledge({
-    required this.playerId,
-    required this.shots,
-    required this.shipsRemaining,
-  });
-
-  /// The player the bot may fire at.
-  final String playerId;
-
-  /// The cells the bot already fired at this player, with their results.
-  final Map<CellCoord, ShotResult> shots;
-
-  /// How many ships of this player are still afloat. Public information: the
-  /// Host announces every sunk ship.
-  final int shipsRemaining;
-}
-
-/// A shot a computer opponent decided to fire.
-class BotShot {
-  const BotShot({required this.targetPlayerId, required this.cell});
-
-  /// The player the shot is aimed at.
-  final String targetPlayerId;
-
-  /// The cell the shot is aimed at.
-  final CellCoord cell;
-}
-
 /// Decides where a computer opponent fires.
 ///
-/// The brain is pure and stateless: it reads the board size and the shots the
-/// bot already fired, and answers with a cell. Every rule of a turn is still
-/// validated by the Host, so a bot goes through the same path as a remote
-/// client.
+/// The brain is pure and stateless: it reads the board size and the cells the
+/// bot already fired at, and answers with a cell. Every rule of a turn is
+/// still validated by the Host, so a bot goes through the same path as a
+/// remote client.
+///
+/// One shot is resolved against every living fleet, so the bot reasons about
+/// a single set of cells instead of one board per opponent.
 class BotBrain {
   BotBrain({required this.difficulty, Random? random})
     : _random = random ?? Random();
@@ -75,38 +43,13 @@ class BotBrain {
 
   final Random _random;
 
-  /// Picks the next shot, or `null` when no cell is left.
-  BotShot? chooseShot({
+  /// Picks the next cell, or `null` when no cell is left.
+  CellCoord? chooseCell({
     required BoardSize board,
-    required List<BotTargetKnowledge> targets,
+    required Map<CellCoord, ShotResult> shots,
   }) {
-    final List<BotTargetKnowledge> candidates = targets
-        .where(
-          (BotTargetKnowledge target) => _hasUnfiredCell(board, target.shots),
-        )
-        .toList();
-    if (candidates.isEmpty) return null;
-
-    final BotTargetKnowledge target = _chooseTarget(candidates);
-    final CellCoord cell = _chooseCell(board, target.shots);
-    return BotShot(targetPlayerId: target.playerId, cell: cell);
-  }
-
-  /// Picks the opponent to fire at.
-  ///
-  /// A hard opponent finishes the player that is closest to sinking, because
-  /// that removes the most dangerous board fastest.
-  BotTargetKnowledge _chooseTarget(List<BotTargetKnowledge> targets) {
-    if (difficulty != BotDifficulty.hard) {
-      return targets[_random.nextInt(targets.length)];
-    }
-    final int fewest = targets
-        .map((BotTargetKnowledge target) => target.shipsRemaining)
-        .reduce(min);
-    final List<BotTargetKnowledge> weakest = targets
-        .where((BotTargetKnowledge target) => target.shipsRemaining == fewest)
-        .toList();
-    return weakest[_random.nextInt(weakest.length)];
+    if (!_hasUnfiredCell(board, shots)) return null;
+    return _chooseCell(board, shots);
   }
 
   /// Picks the cell to fire at.

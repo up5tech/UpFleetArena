@@ -13,7 +13,10 @@ class AppProtocol {
   const AppProtocol._();
 
   /// Current protocol version (PLAN.md §8.1).
-  static const int version = 1;
+  ///
+  /// Version 2 fires on the single shared map: `game:fire` names no target and
+  /// one shot resolves against every living opponent.
+  static const int version = 2;
 
   /// mDNS / Bonjour service type used to advertise and discover rooms.
   ///
@@ -45,7 +48,8 @@ class ProtocolErrorCode {
   static const String roomAlreadyStarted = 'ROOM_ALREADY_STARTED';
   static const String hostOnlyAction = 'HOST_ONLY_ACTION';
   static const String invalidRoomConfig = 'INVALID_ROOM_CONFIG';
-  static const String unsupportedProtocolVersion = 'UNSUPPORTED_PROTOCOL_VERSION';
+  static const String unsupportedProtocolVersion =
+      'UNSUPPORTED_PROTOCOL_VERSION';
   static const String placementPhaseNotActive = 'PLACEMENT_PHASE_NOT_ACTIVE';
   static const String invalidShipPlacement = 'INVALID_SHIP_PLACEMENT';
   static const String fleetIncomplete = 'FLEET_INCOMPLETE';

@@ -207,17 +207,28 @@ class RoomSessionState {
   }) => RoomSessionState(
     role: role ?? this.role,
     status: status ?? this.status,
-    snapshot: identical(snapshot, _unset) ? this.snapshot : snapshot as RoomSnapshot?,
-    inviteCode: identical(inviteCode, _unset) ? this.inviteCode : inviteCode as String?,
+    snapshot: identical(snapshot, _unset)
+        ? this.snapshot
+        : snapshot as RoomSnapshot?,
+    inviteCode: identical(inviteCode, _unset)
+        ? this.inviteCode
+        : inviteCode as String?,
     roomId: identical(roomId, _unset) ? this.roomId : roomId as String?,
     playerId: identical(playerId, _unset) ? this.playerId : playerId as String?,
-    errorCode: identical(errorCode, _unset) ? this.errorCode : errorCode as String?,
-    errorMessage:
-        identical(errorMessage, _unset) ? this.errorMessage : errorMessage as String?,
+    errorCode: identical(errorCode, _unset)
+        ? this.errorCode
+        : errorCode as String?,
+    errorMessage: identical(errorMessage, _unset)
+        ? this.errorMessage
+        : errorMessage as String?,
     hostPort: identical(hostPort, _unset) ? this.hostPort : hostPort as int?,
     hostAddresses: hostAddresses ?? this.hostAddresses,
-    placement: identical(placement, _unset) ? this.placement : placement as PlacementState?,
-    readiness: identical(readiness, _unset) ? this.readiness : readiness as ReadinessState?,
+    placement: identical(placement, _unset)
+        ? this.placement
+        : placement as PlacementState?,
+    readiness: identical(readiness, _unset)
+        ? this.readiness
+        : readiness as ReadinessState?,
     placementError: identical(placementError, _unset)
         ? this.placementError
         : placementError as String?,
@@ -236,8 +247,12 @@ class RoomSessionState {
         ? this.turnCountdown
         : turnCountdown as Countdown?,
     firePending: firePending ?? this.firePending,
-    combatError: identical(combatError, _unset) ? this.combatError : combatError as String?,
-    lastActivity: identical(lastActivity, _unset) ? this.lastActivity : lastActivity as PublicActivity?,
+    combatError: identical(combatError, _unset)
+        ? this.combatError
+        : combatError as String?,
+    lastActivity: identical(lastActivity, _unset)
+        ? this.lastActivity
+        : lastActivity as PublicActivity?,
     matchResult: identical(matchResult, _unset)
         ? this.matchResult
         : matchResult as MatchResult?,
@@ -368,7 +383,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
         hostAddresses: await _localIpv4Addresses(),
       );
       // The Host must stay reachable: keep its screen awake while hosting.
-      final ScreenAwakeService screenAwake = ref.read(screenAwakeServiceProvider);
+      final ScreenAwakeService screenAwake = ref.read(
+        screenAwakeServiceProvider,
+      );
       _screenAwake = screenAwake;
       unawaited(screenAwake.enable());
     } on Object catch (error) {
@@ -377,21 +394,32 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       state = state.copyWith(
         status: RoomSessionStatus.failed,
         errorCode: 'HOST_START_FAILED',
-        errorMessage:
-            'The room could not be started. $error',
+        errorMessage: 'The room could not be started. $error',
       );
     }
   }
 
-  /// Starts a solo match against a computer opponent on this device.
+  /// Starts a solo match against one or more computer opponents on this device.
   ///
   /// Nothing is advertised and no socket is opened: the room authority runs
   /// in-process and plays the turns of the bot itself. The preparation starts
   /// right away, so the player only has to place their own fleet.
+  ///
+  /// [difficulty] and [botName] describe a single opponent and are kept for
+  /// backwards compatibility; [difficulties] and [botNames] allow seating
+  /// several opponents of different strengths in the same match. When neither
+  /// is given, [botCount] (or `config.botCount`) opponents of [difficulty]
+  /// are seated.
   Future<void> startPractice({
     required Profile profile,
-    required BotDifficulty difficulty,
-    required String botName,
+    BotDifficulty difficulty = BotDifficulty.medium,
+    String? botName,
+    int? botCount,
+    List<BotDifficulty>? difficulties,
+    List<String>? botNames,
+    List<BotDifficulty>? botDifficulties,
+    List<String>? opponentNames,
+    int? opponentCount,
     RoomConfig? config,
   }) async {
     await _teardown();
@@ -401,7 +429,33 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       status: RoomSessionStatus.working,
     );
 
-    final RoomConfig effectiveConfig = config ?? RoomConfig.defaults;
+    final List<BotDifficulty> resolvedDifficulties =
+        (difficulties ?? botDifficulties) ??
+        (botCount != null || opponentCount != null
+            ? List<BotDifficulty>.filled(
+                botCount ?? opponentCount ?? 1,
+                difficulty,
+              )
+            : (config != null && config.botCount > 0
+                  ? List<BotDifficulty>.filled(config.botCount, difficulty)
+                  : <BotDifficulty>[difficulty]));
+
+    final List<BotDifficulty> opponents = resolvedDifficulties.isEmpty
+        ? <BotDifficulty>[difficulty]
+        : resolvedDifficulties;
+
+    final List<String> resolvedNames =
+        (botNames ?? opponentNames) ??
+        List<String>.generate(
+          opponents.length,
+          (int index) => botName ?? 'Computer',
+        );
+
+    final RoomConfig baseConfig = config ?? RoomConfig.defaults;
+    final RoomConfig effectiveConfig = baseConfig.copyWith(
+      botCount: opponents.length,
+      botDifficulty: opponents.first,
+    );
     final List<String> problems = effectiveConfig.validate();
     if (problems.isNotEmpty) {
       state = state.copyWith(
@@ -423,13 +477,18 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       tcpPort: 0,
     );
 
-    final List<String> setupProblems = <String>[
-      ...await coordinator.hostAddBot(
-        displayName: botName,
-        difficulty: difficulty,
-      ),
-      ...await coordinator.hostStartPlacement(),
-    ];
+    final List<String> setupProblems = <String>[];
+    for (int index = 0; index < opponents.length; index++) {
+      setupProblems.addAll(
+        await coordinator.hostAddBot(
+          displayName: index < resolvedNames.length
+              ? resolvedNames[index]
+              : 'Computer',
+          difficulty: opponents[index],
+        ),
+      );
+    }
+    setupProblems.addAll(await coordinator.hostStartPlacement());
     if (setupProblems.isNotEmpty) {
       state = state.copyWith(
         status: RoomSessionStatus.failed,
@@ -455,52 +514,52 @@ class RoomSessionController extends Notifier<RoomSessionState> {
   /// authority in-process, so both publish the same streams and the UI never
   /// needs to know which one drives it.
   void _bindHostCoordinator(RoomCoordinator coordinator) {
-    _hostSubscription = coordinator.hostSnapshots.listen(
-      (RoomSnapshot snapshot) {
-        state = state.copyWith(snapshot: snapshot);
-      },
+    _hostSubscription = coordinator.hostSnapshots.listen((
+      RoomSnapshot snapshot,
+    ) {
+      state = state.copyWith(snapshot: snapshot);
+    });
+
+    _hostPlacementSubscription = coordinator.hostPlacementStates.listen((
+      PlacementState placement,
+    ) {
+      state = state.copyWith(placement: placement);
+    });
+
+    _hostReadinessSubscription = coordinator.hostReadinessStates.listen((
+      ReadinessState readiness,
+    ) {
+      state = state.copyWith(readiness: readiness);
+    });
+
+    _hostCountdownSubscription = coordinator.hostCountdowns.listen((
+      int remaining,
+    ) {
+      state = state.copyWith(countdown: Countdown(remainingSeconds: remaining));
+    });
+
+    _hostMatchSubscription = coordinator.hostMatchStarts.listen((
+      MatchStartState match,
+    ) {
+      state = state.copyWith(match: match, countdown: null);
+    });
+
+    _hostNoticeSubscription = coordinator.hostNotices.listen((String notice) {
+      state = state.copyWith(notice: notice);
+    });
+
+    _hostMatchSnapshotSubscription = coordinator.hostMatchSnapshots.listen(
+      _acceptMatchSnapshot,
     );
-
-    _hostPlacementSubscription = coordinator.hostPlacementStates
-        .listen((PlacementState placement) {
-          state = state.copyWith(placement: placement);
-        });
-
-    _hostReadinessSubscription = coordinator.hostReadinessStates
-        .listen((ReadinessState readiness) {
-          state = state.copyWith(readiness: readiness);
-        });
-
-    _hostCountdownSubscription = coordinator.hostCountdowns.listen(
-      (int remaining) {
-        state = state.copyWith(
-          countdown: Countdown(
-            remainingSeconds: remaining,
-                        ),
-        );
-      },
+    _hostMatchResultSubscription = coordinator.hostMatchResults.listen(
+      _acceptMatchResult,
     );
-
-    _hostMatchSubscription = coordinator.hostMatchStarts.listen(
-      (MatchStartState match) {
-        state = state.copyWith(match: match, countdown: null);
-      },
+    _hostTurnCountdownSubscription = coordinator.hostTurnCountdowns.listen(
+      _acceptTurnCountdown,
     );
-
-    _hostNoticeSubscription = coordinator.hostNotices.listen(
-      (String notice) {
-        state = state.copyWith(notice: notice);
-      },
-    );
-
-    _hostMatchSnapshotSubscription = coordinator.hostMatchSnapshots
-        .listen(_acceptMatchSnapshot);
-    _hostMatchResultSubscription = coordinator.hostMatchResults
-        .listen(_acceptMatchResult);
-    _hostTurnCountdownSubscription = coordinator.hostTurnCountdowns
-        .listen(_acceptTurnCountdown);
     _hostShotSubscription = coordinator.hostShotFeedbacks.listen(
-      (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
+      (ShotFeedback feedback) =>
+          state = state.copyWith(lastShot: feedback, lastActivity: null),
     );
     _hostActivitySubscription = coordinator.hostPublicActivities.listen(
       _acceptPublicActivity,
@@ -584,11 +643,11 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     return const <String>[];
   }
 
-  Future<void> fire({
-    required String targetPlayerId,
-    required int row,
-    required int column,
-  }) async {
+  /// Fires at a cell of the one shared battle map.
+  ///
+  /// The Host resolves the shot against every living opponent, so the player
+  /// never picks a target.
+  Future<void> fire({required int row, required int column}) async {
     final MatchSnapshot? snapshot = state.matchSnapshot;
     if (!state.isInRoom || snapshot == null || state.firePending) return;
     if (snapshot.winnerPlayerId != null ||
@@ -608,23 +667,27 @@ class RoomSessionController extends Notifier<RoomSessionState> {
           matchId: snapshot.matchId,
           turnNumber: snapshot.turnNumber,
           expectedStateVersion: snapshot.stateVersion,
-          targetPlayerId: targetPlayerId,
           row: row,
           column: column,
         );
       } else {
-        problems = await _clientSession?.fire(
-          matchId: snapshot.matchId,
-          turnNumber: snapshot.turnNumber,
-          expectedStateVersion: snapshot.stateVersion,
-          targetPlayerId: targetPlayerId,
-          row: row,
-          column: column,
-        ) ?? <String>['The host is not connected.'];
+        problems =
+            await _clientSession?.fire(
+              matchId: snapshot.matchId,
+              turnNumber: snapshot.turnNumber,
+              expectedStateVersion: snapshot.stateVersion,
+              row: row,
+              column: column,
+            ) ??
+            <String>['The host is not connected.'];
       }
-      if (!ref.mounted || state.matchSnapshot?.matchId != snapshot.matchId) return;
+      if (!ref.mounted || state.matchSnapshot?.matchId != snapshot.matchId) {
+        return;
+      }
       if (problems.isNotEmpty) _submittedTurn = null;
-      state = state.copyWith(combatError: problems.isEmpty ? null : problems.join(' '));
+      state = state.copyWith(
+        combatError: problems.isEmpty ? null : problems.join(' '),
+      );
     } on Object {
       if (ref.mounted && state.isInRoom) {
         state = state.copyWith(combatError: 'The shot could not be confirmed.');
@@ -643,7 +706,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     }
     state = state.copyWith(
       matchSnapshot: snapshot,
-      turnCountdown: snapshot.winnerPlayerId != null || snapshot.turnRemainingSeconds == null
+      turnCountdown:
+          snapshot.winnerPlayerId != null ||
+              snapshot.turnRemainingSeconds == null
           ? null
           : Countdown(remainingSeconds: snapshot.turnRemainingSeconds!),
     );
@@ -651,7 +716,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
   void _acceptTurnCountdown(int remaining) {
     if (state.matchSnapshot?.winnerPlayerId != null) return;
-    state = state.copyWith(turnCountdown: Countdown(remainingSeconds: remaining));
+    state = state.copyWith(
+      turnCountdown: Countdown(remainingSeconds: remaining),
+    );
   }
 
   /// Stores the final result the Host broadcast.
@@ -753,12 +820,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       );
       return;
     }
-    await _join(
-      address: address,
-      port: port,
-      code: code,
-      profile: profile,
-    );
+    await _join(address: address, port: port, code: code, profile: profile);
   }
 
   Future<void> _join({
@@ -782,42 +844,45 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _clientSubscription = session.snapshots.listen((RoomSnapshot snapshot) {
       state = state.copyWith(snapshot: snapshot);
     });
-    _clientPlacementSubscription = session.placementStates.listen(
-      (PlacementState placement) {
-        state = state.copyWith(placement: placement);
-      },
-    );
-    _clientReadinessSubscription = session.readinessStates.listen(
-      (ReadinessState readiness) {
-        state = state.copyWith(readiness: readiness);
-      },
-    );
-    _clientCountdownSubscription = session.countdowns.listen((int remaining) {
-      state = state.copyWith(
-        countdown: Countdown(
-          remainingSeconds: remaining,
-                  ),
-      );
+    _clientPlacementSubscription = session.placementStates.listen((
+      PlacementState placement,
+    ) {
+      state = state.copyWith(placement: placement);
     });
-    _clientMatchSubscription = session.matchStarts.listen(
-      (MatchStartState match) {
-        state = state.copyWith(match: match, countdown: null);
-      },
+    _clientReadinessSubscription = session.readinessStates.listen((
+      ReadinessState readiness,
+    ) {
+      state = state.copyWith(readiness: readiness);
+    });
+    _clientCountdownSubscription = session.countdowns.listen((int remaining) {
+      state = state.copyWith(countdown: Countdown(remainingSeconds: remaining));
+    });
+    _clientMatchSubscription = session.matchStarts.listen((
+      MatchStartState match,
+    ) {
+      state = state.copyWith(match: match, countdown: null);
+    });
+    _clientNoticeSubscription = session.placementCancellations.listen((
+      String notice,
+    ) {
+      state = state.copyWith(notice: notice, countdown: null);
+    });
+    _clientMatchSnapshotSubscription = session.matchSnapshots.listen(
+      _acceptMatchSnapshot,
     );
-    _clientNoticeSubscription = session.placementCancellations.listen(
-      (String notice) {
-        state = state.copyWith(notice: notice, countdown: null);
-      },
+    _clientMatchResultSubscription = session.matchResults.listen(
+      _acceptMatchResult,
     );
-    _clientMatchSnapshotSubscription = session.matchSnapshots.listen(_acceptMatchSnapshot);
-    _clientMatchResultSubscription = session.matchResults.listen(_acceptMatchResult);
     _clientShotSubscription = session.shotFeedbacks.listen(
-      (ShotFeedback feedback) => state = state.copyWith(lastShot: feedback, lastActivity: null),
+      (ShotFeedback feedback) =>
+          state = state.copyWith(lastShot: feedback, lastActivity: null),
     );
     _clientActivitySubscription = session.publicActivities.listen(
       _acceptPublicActivity,
     );
-    _clientTurnCountdownSubscription = session.turnCountdowns.listen(_acceptTurnCountdown);
+    _clientTurnCountdownSubscription = session.turnCountdowns.listen(
+      _acceptTurnCountdown,
+    );
     _eventSubscription = session.events.listen((RoomClientEvent event) {
       switch (event) {
         case RoomJoinedEvent(:final String roomId):

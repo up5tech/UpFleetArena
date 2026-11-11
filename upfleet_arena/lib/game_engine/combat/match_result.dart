@@ -17,6 +17,20 @@ class PlayerMatchStats {
   /// How many ships the player sank.
   int shipsSunk = 0;
 
+  /// Records one shot that was resolved against every living fleet at once.
+  ///
+  /// The volley counts as one shot. It is a hit when at least one fleet had a
+  /// ship on the cell, and every ship it sank is counted.
+  void recordVolley({required bool hit, required int shipsSunk}) {
+    shots++;
+    if (hit) {
+      hits++;
+    } else {
+      misses++;
+    }
+    this.shipsSunk += shipsSunk;
+  }
+
   /// Records one accepted shot.
   void recordShot(ShotResult result) {
     shots++;

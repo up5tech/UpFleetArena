@@ -14,8 +14,10 @@ class Countdown {
   final int remainingSeconds;
   final Stopwatch _elapsed;
 
-  int get remaining => (remainingSeconds - _elapsed.elapsed.inSeconds)
-      .clamp(0, remainingSeconds);
+  int get remaining => (remainingSeconds - _elapsed.elapsed.inSeconds).clamp(
+    0,
+    remainingSeconds,
+  );
 
   /// Serializes the countdown.
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -23,9 +25,8 @@ class Countdown {
   };
 
   /// Parses a countdown received from the Host.
-  factory Countdown.fromJson(Map<String, dynamic> json) => Countdown(
-    remainingSeconds: json['remainingSeconds'] as int? ?? 0,
-  );
+  factory Countdown.fromJson(Map<String, dynamic> json) =>
+      Countdown(remainingSeconds: json['remainingSeconds'] as int? ?? 0);
 }
 
 /// One entry of the turn order.
@@ -176,10 +177,12 @@ class ShipView {
     'row': row,
     'column': column,
     'hitCells': hitCells
-        .map((CellCoord cell) => <String, dynamic>{
-              'row': cell.row,
-              'column': cell.column,
-            })
+        .map(
+          (CellCoord cell) => <String, dynamic>{
+            'row': cell.row,
+            'column': cell.column,
+          },
+        )
         .toList(),
     'sunk': sunk,
   };
@@ -196,9 +199,77 @@ class ShipView {
   );
 }
 
+/// A ship of another fleet that is already sunk, as the shared map shows it.
+///
+/// Only a sunk ship is published: every cell of it was hit, and every hit is
+/// already a public mark on the shared map, so the outline tells the room
+/// nothing it did not already know. A fleet that is still afloat never leaves
+/// the Host (GAME_RULES.md §2).
+class SunkShipView {
+  const SunkShipView({
+    required this.ownerPlayerId,
+    required this.shipId,
+    required this.length,
+    required this.orientation,
+    required this.row,
+    required this.column,
+  });
+
+  /// The player whose fleet lost the ship.
+  final String ownerPlayerId;
+
+  /// The identifier of the ship inside its fleet.
+  final String shipId;
+
+  /// The length of the ship in cells.
+  final int length;
+
+  /// The direction the ship points to.
+  final ShipOrientation orientation;
+
+  /// The row of the anchor cell.
+  final int row;
+
+  /// The column of the anchor cell.
+  final int column;
+
+  /// Where the sunk ship lies on the shared map.
+  ShipPlacement get placement => ShipPlacement(
+    shipId: shipId,
+    length: length,
+    orientation: orientation,
+    row: row,
+    column: column,
+  );
+
+  /// Serializes the sunk ship.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'ownerPlayerId': ownerPlayerId,
+    'shipId': shipId,
+    'length': length,
+    'orientation': orientation.wire,
+    'row': row,
+    'column': column,
+  };
+
+  /// Parses a sunk ship received from the Host.
+  factory SunkShipView.fromJson(Map<String, dynamic> json) => SunkShipView(
+    ownerPlayerId: json['ownerPlayerId'] as String? ?? '',
+    shipId: json['shipId'] as String? ?? '',
+    length: json['length'] as int? ?? 0,
+    orientation: ShipOrientation.fromWire(json['orientation'] as String?),
+    row: json['row'] as int? ?? 0,
+    column: json['column'] as int? ?? 0,
+  );
+}
+
 /// The own board of a player.
 class OwnBoardView {
-  const OwnBoardView({required this.ships, required this.shotsReceived});
+  const OwnBoardView({
+    required this.ships,
+    required this.shotsReceived,
+    this.receivedShots = const <ShotView>[],
+  });
 
   /// The ships of the fleet.
   final List<ShipView> ships;
@@ -206,25 +277,36 @@ class OwnBoardView {
   /// Every cell that was fired at.
   final List<CellCoord> shotsReceived;
 
+  /// The shots that were fired at this fleet, by every player.
+  ///
+  /// The shared map lets the owner of the fleet see who hit them: every shot
+  /// carries the player who fired it.
+  final List<ShotView> receivedShots;
+
   /// Serializes the board.
   Map<String, dynamic> toJson() => <String, dynamic>{
     'ships': ships.map((ShipView ship) => ship.toJson()).toList(),
     'shotsReceived': _writeCells(shotsReceived),
+    'receivedShots': receivedShots
+        .map((ShotView shot) => shot.toJson())
+        .toList(),
   };
 
   /// Parses a board received from the Host.
   factory OwnBoardView.fromJson(Map<String, dynamic> json) => OwnBoardView(
     ships: _readViews(json['ships']),
     shotsReceived: _readCells(json['shotsReceived']),
+    receivedShots: _readShots(json['receivedShots']),
   );
 }
 
-/// One shot of the shooter against a target.
+/// One shot of a shooter against a target.
 class ShotView {
   const ShotView({
     required this.row,
     required this.column,
     required this.result,
+    this.attackerPlayerId = '',
   });
 
   /// The row of the cell.
@@ -236,6 +318,12 @@ class ShotView {
   /// What the shot did.
   final ShotResult result;
 
+  /// The player who fired the shot.
+  ///
+  /// The shared map shows the fire of every player on one board, so every
+  /// mark needs to know who it belongs to.
+  final String attackerPlayerId;
+
   /// The cell of the shot.
   CellCoord get cell => CellCoord(row, column);
 
@@ -244,6 +332,7 @@ class ShotView {
     'row': row,
     'column': column,
     'result': result.wire,
+    'attackerPlayerId': attackerPlayerId,
   };
 
   /// Parses a shot received from the Host.
@@ -251,47 +340,7 @@ class ShotView {
     row: json['row'] as int? ?? 0,
     column: json['column'] as int? ?? 0,
     result: ShotResult.fromWire(json['result'] as String?),
-  );
-}
-
-/// The board of an opponent, as the shooter sees it.
-///
-/// It carries the shots of the shooter and nothing else: the position of the
-/// opponent's ships stays hidden (PLAN.md §2.2).
-class TargetBoardView {
-  const TargetBoardView({
-    required this.playerId,
-    required this.displayName,
-    required this.alive,
-    required this.shots,
-  });
-
-  /// The opponent the board belongs to.
-  final String playerId;
-
-  /// The display name of the opponent.
-  final String displayName;
-
-  /// Whether the opponent is still in the match.
-  final bool alive;
-
-  /// The shots the shooter fired at this opponent.
-  final List<ShotView> shots;
-
-  /// Serializes the board.
-  Map<String, dynamic> toJson() => <String, dynamic>{
-    'playerId': playerId,
-    'displayName': displayName,
-    'alive': alive,
-    'shots': shots.map((ShotView shot) => shot.toJson()).toList(),
-  };
-
-  /// Parses a board received from the Host.
-  factory TargetBoardView.fromJson(Map<String, dynamic> json) => TargetBoardView(
-    playerId: json['playerId'] as String? ?? '',
-    displayName: json['displayName'] as String? ?? 'Player',
-    alive: json['alive'] as bool? ?? true,
-    shots: _readShots(json['shots']),
+    attackerPlayerId: json['attackerPlayerId'] as String? ?? '',
   );
 }
 
@@ -380,9 +429,8 @@ class PublicActivity {
 
 /// The permission-filtered state of the match.
 ///
-/// Every client receives its own view: the own board is exact, the boards of
-/// the opponents only carry the shots the client fired at them
-/// (PLAN.md §6.6, §8).
+/// Every client receives its own exact fleet, the public status of every
+/// player and the shots on the single shared battle map (PLAN.md §6.6, §8).
 class MatchSnapshot {
   const MatchSnapshot({
     required this.matchId,
@@ -390,7 +438,8 @@ class MatchSnapshot {
     required this.turnNumber,
     required this.activePlayerId,
     required this.players,
-    required this.targets,
+    this.mapShots = const <ShotView>[],
+    this.sunkShips = const <SunkShipView>[],
     this.turnRemainingSeconds,
     this.ownBoard,
     this.winnerPlayerId,
@@ -417,23 +466,21 @@ class MatchSnapshot {
   /// The own board of the recipient.
   final OwnBoardView? ownBoard;
 
-  /// The boards of the opponents, from the view of the recipient.
-  final List<TargetBoardView> targets;
+  /// Every shot on the shared battle map, one mark per shooter and cell.
+  ///
+  /// The map is public: it carries the fire of every player, each mark in the
+  /// colour of its shooter, and the own fleet is drawn on the same board.
+  final List<ShotView> mapShots;
+
+  /// Every ship of every fleet that is already sunk.
+  ///
+  /// The shared map draws their hulls as faded outlines in the colour of the
+  /// player who owned them, so the room can tell whose fleet lost the ship.
+  /// Fleets that are still afloat are never part of the snapshot.
+  final List<SunkShipView> sunkShips;
 
   /// The winner, once the match is over.
   final String? winnerPlayerId;
-
-  /// The player the recipient may shoot at.
-  TargetBoardView? targetById(String playerId) {
-    for (final TargetBoardView target in targets) {
-      if (target.playerId == playerId) return target;
-    }
-    return null;
-  }
-
-  /// The opponents that are still alive.
-  List<TargetBoardView> get livingTargets =>
-      targets.where((TargetBoardView target) => target.alive).toList();
 
   /// The player view of a player, or `null` when the player is unknown.
   MatchPlayerView? playerById(String playerId) {
@@ -454,8 +501,9 @@ class MatchSnapshot {
         .map((MatchPlayerView player) => player.toJson())
         .toList(),
     'ownBoard': ownBoard?.toJson(),
-    'targets': targets
-        .map((TargetBoardView target) => target.toJson())
+    'mapShots': mapShots.map((ShotView shot) => shot.toJson()).toList(),
+    'sunkShips': sunkShips
+        .map((SunkShipView ship) => ship.toJson())
         .toList(),
     'winnerPlayerId': winnerPlayerId,
   };
@@ -473,7 +521,8 @@ class MatchSnapshot {
       ownBoard: rawOwnBoard is Map<String, dynamic>
           ? OwnBoardView.fromJson(rawOwnBoard)
           : null,
-      targets: _readTargets(json['targets']),
+      mapShots: _readShots(json['mapShots']),
+      sunkShips: _readSunkShips(json['sunkShips']),
       winnerPlayerId: json['winnerPlayerId'] as String?,
     );
   }
@@ -589,9 +638,7 @@ class MatchResult {
     'winnerPlayerId': winnerPlayerId,
     'winnerDisplayName': winnerDisplayName,
     'durationSeconds': durationSeconds,
-    'ranking': ranking
-        .map((PlayerResultView entry) => entry.toJson())
-        .toList(),
+    'ranking': ranking.map((PlayerResultView entry) => entry.toJson()).toList(),
   };
 
   /// Parses a result received from the Host.
@@ -665,10 +712,8 @@ List<CellCoord> _readCells(Object? raw) {
   return raw
       .whereType<Map<String, dynamic>>()
       .map(
-        (Map<String, dynamic> cell) => CellCoord(
-          cell['row'] as int? ?? 0,
-          cell['column'] as int? ?? 0,
-        ),
+        (Map<String, dynamic> cell) =>
+            CellCoord(cell['row'] as int? ?? 0, cell['column'] as int? ?? 0),
       )
       .toList();
 }
@@ -684,9 +729,14 @@ List<Map<String, dynamic>> _writeCells(List<CellCoord> cells) => cells
 
 List<ShipView> _readViews(Object? raw) {
   if (raw is! List) return const <ShipView>[];
+  return raw.whereType<Map<String, dynamic>>().map(ShipView.fromJson).toList();
+}
+
+List<SunkShipView> _readSunkShips(Object? raw) {
+  if (raw is! List) return const <SunkShipView>[];
   return raw
       .whereType<Map<String, dynamic>>()
-      .map(ShipView.fromJson)
+      .map(SunkShipView.fromJson)
       .toList();
 }
 
@@ -700,13 +750,5 @@ List<MatchPlayerView> _readPlayers(Object? raw) {
   return raw
       .whereType<Map<String, dynamic>>()
       .map(MatchPlayerView.fromJson)
-      .toList();
-}
-
-List<TargetBoardView> _readTargets(Object? raw) {
-  if (raw is! List) return const <TargetBoardView>[];
-  return raw
-      .whereType<Map<String, dynamic>>()
-      .map(TargetBoardView.fromJson)
       .toList();
 }

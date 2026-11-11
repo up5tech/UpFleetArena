@@ -89,14 +89,13 @@ acknowledgement, and detect a stale state version.
 
 ```json
 {
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "messageType": "game:fire",
   "requestId": "local-uuid",
   "roomId": "room-uuid",
   "playerId": "player-uuid",
   "expectedStateVersion": 24,
   "payload": {
-    "targetPlayerId": "target-player-uuid",
     "row": 3,
     "column": 7
   }
@@ -105,7 +104,7 @@ acknowledgement, and detect a stale state version.
 
 | Field | Required | Meaning |
 |---|---|---|
-| `protocolVersion` | yes | Integer protocol version. Currently `1`. |
+| `protocolVersion` | yes | Integer protocol version. Currently `2`. |
 | `messageType` | yes | Route key, e.g. `room:join`. |
 | `requestId` | recommended | Correlation id echoed in the acknowledgement. |
 | `roomId` | session-dependent | Room the message belongs to. |
@@ -149,7 +148,7 @@ The discovery backend is still under evaluation — see
 | `placement:set` | Set the fleet layout | Sender owns the board; the room still accepts placements; layout valid |
 | `placement:auto` | Request automatic placement | Sender owns the board; the room still accepts placements |
 | `placement:ready` | Confirm a complete fleet | All ships placed legally |
-| `game:fire` | Fire at a coordinate | Authenticated sender owns the live turn; the command names the current match, turn and state version; living target; valid cell; no repeated shot for this attacker-target pair |
+| `game:fire` | Fire at a coordinate of the shared map | Authenticated sender owns the live turn; the command names the current match, turn and state version; valid cell; no repeated shot by this attacker |
 | `game:request-snapshot` | Request the current authorized state | Sender is still admitted to the room/match |
 | `client:heartbeat` | Report connection health | Valid active connection |
 | `session:resume` | Reclaim a temporarily disconnected seat | Resume token valid; Host room still active; grace period not expired |
@@ -254,11 +253,15 @@ text or private fleet data.
   players' readiness only.
 - During a match, the target receives impact coordinates for shots against
   their own board; the attacker receives the result of their own shot.
+- The battle map is shared: every player sees the shots that were fired at an
+  opponent, each marked with the shooter who fired it. A shared map reveals
+  **where the shots landed**, so a hit becomes common knowledge of the room.
+  The **layout** of a fleet still stays with the Host and its owner.
 - Other players receive public match events and aggregate status only.
 - Eliminated players receive a restricted spectator projection: their own
-  sunk fleet, their own attack history, the public roster with aggregate
-  fleet status and the public activity events. They get no fire affordance
-  and the Host refuses any shot they send.
+  sunk fleet, the public roster with aggregate fleet status and the public
+  activity events. They get no fire affordance and the Host refuses any shot
+  they send.
 - The final ranking and the per-player statistics are computed by the Host
   and broadcast identically to every client.
 - Client clocks, turn counters, hit calculations, ship counts and match status
@@ -625,7 +628,6 @@ The preparation was cancelled and the room returned to the lobby:
   "payload": {
     "matchId": "match-uuid",
     "turnNumber": 5,
-    "targetPlayerId": "player-uuid",
     "row": 3,
     "column": 7
   }
@@ -637,8 +639,10 @@ The preparation was cancelled and the room returned to the lobby:
 | `requestId` | Required. Echoed back in the `game:shot-result` acknowledgement so the sender can match the answer to its own request |
 | `expectedStateVersion` | Required. The version the sender believed was current |
 | `matchId`, `turnNumber` | The match and turn the shot was aimed at |
-| `targetPlayerId` | The opponent. The attacker may never be the target |
-| `row`, `column` | Zero-based cell on the target's board |
+| `row`, `column` | Zero-based cell on the single shared battle map |
+
+The command names **no target**. One shot is resolved against every living
+opponent at the same cell, on the one battle map the whole room shares.
 
 The Host resolves the sender from the accepted socket and never trusts a
 `playerId` in the envelope or the payload. The command is rejected, without
@@ -650,13 +654,13 @@ changing any state, when:
 | No match is running | `MATCH_ALREADY_FINISHED` |
 | `matchId`, `turnNumber` or `expectedStateVersion` is stale | `STATE_VERSION_CONFLICT` |
 | The sender does not own the live turn, or the deadline already passed | `NOT_YOUR_TURN` |
-| The target is unknown, eliminated or the sender themself | `TARGET_NOT_ALIVE` |
+| No living opponent is left to shoot at | `TARGET_NOT_ALIVE` |
 | The cell is outside the board | `INVALID_TARGET_CELL` |
 | A field is missing or has the wrong type | `MALFORMED_PAYLOAD` |
 
-The no-repeat rule is **per attacker-target pair**: two different players may
-both fire at the same cell of the same target, and each of them may fire at
-any given cell of a target only once.
+The no-repeat rule is **per attacker on the shared map**: two different
+players may fire at the same cell, and each of them may fire at any given cell
+only once, whichever fleet it hits.
 
 An accepted shot commits the damage, the next actor and the new turn deadline
 before the first frame is written, so a concurrent command or a deadline tick
@@ -667,8 +671,8 @@ once.
 
 | Event | Recipients | Payload |
 |---|---|---|
-| `game:shot-result` | The attacker and the target | `attackerPlayerId`, `targetPlayerId`, `row`, `column`, `result` (`miss`, `hit`, `shipSunk`), plus the attacker's `targetBoard` or the target's `ownBoard`. The `requestId` is echoed to the attacker only |
-| `game:public-activity` | Every other player | `attackerPlayerId`, `targetPlayerId`, `result` — no coordinates and no ship data |
+| `game:shot-result` | The attacker and every target of the volley | `attackerPlayerId`, `targetPlayerId`, `row`, `column`, `result` (`miss`, `hit`, `shipSunk`). The attacker receives **one** event that aggregates the volley and names the target with the strongest result; each target receives its own impact together with its `ownBoard`. The `requestId` is echoed to the attacker only |
+| `game:public-activity` | Every player who was not part of the volley | `attackerPlayerId`, `targetPlayerId`, `result` — no coordinates and no ship data. On the shared map the attacker and every living opponent take part in each shot, so this feed reaches eliminated spectators only |
 | `game:turn-started` | Everybody | `activePlayerId`, `turnNumber`, `remainingSeconds` |
 | `game:player-eliminated` | Everybody | `playerId`, `displayName` |
 | `game:state-snapshot` | Everybody, one filtered view each | `snapshot` — see below |
@@ -702,10 +706,13 @@ each accepted change:
         ],
         "shotsReceived": [ { "row": 0, "column": 1 } ]
       },
-      "targets": [
+      "mapShots": [
+        { "row": 0, "column": 0, "result": "hit", "attackerPlayerId": "player-uuid" }
+      ],
+      "sunkShips": [
         {
-          "playerId": "player-uuid", "displayName": "Bob", "alive": true,
-          "shots": [ { "row": 0, "column": 0, "result": "hit" } ]
+          "ownerPlayerId": "other-uuid", "shipId": "ship-2", "length": 2,
+          "orientation": "vertical", "row": 4, "column": 6
         }
       ],
       "winnerPlayerId": null
@@ -714,10 +721,23 @@ each accepted change:
 }
 ```
 
-`ownBoard` is the exact fleet of the recipient. `targets[]` carries only the
-shots **the recipient** fired at that opponent: the position of another
-player's ships never leaves the Host except in that player's own view. The
-player list follows the turn order, not the join order.
+`ownBoard` is the exact fleet of the recipient, and the client draws those
+hulls on the same board as `mapShots`. `mapShots[]` is the single shared
+battle map: every shot of every player, one mark per shooter and cell,
+carrying the strongest result the shot had on any fleet and the
+`attackerPlayerId` that fired it. That is how the client paints one colour per
+shooter. The **layout** of a fleet never leaves the Host except in that
+player's own view; the hits on it do become public, because the shared map
+shows where every shot landed. The player list follows the turn order, not
+the join order.
+
+`sunkShips[]` lists every ship of every fleet that is already sunk, with its
+`ownerPlayerId` and its placement. Only sunk ships are published: every one of
+its cells was hit, and every hit is already a public mark on the shared map,
+so the outline adds no information the room did not have. The client draws
+them as faded outlines in the colour of the player who owned them. Fleets that
+are still afloat never leave the Host, so `sunkShips[]` is empty until the
+first ship goes down.
 
 `shipsRemaining` is aggregate status: the number of ships of that fleet that
 are still afloat. It carries no coordinate and no ship position, so every
@@ -725,11 +745,10 @@ player may see it. The public activity events already announce every sunk
 ship, so the count reveals nothing that was not public before.
 
 An eliminated player receives the same filtered snapshot — their own sunk
-fleet and their own attack history — plus `alive: false` in `players[]`. That
-flag is what turns their UI into the read-only spectator view: no target
-selection, no battle board and no fire action. They never receive another
-player's fleet, and the Host rejects any fire command from them with
-`NOT_YOUR_TURN`.
+fleet and the public map — plus `alive: false` in `players[]`. That flag is
+what turns their UI into the read-only spectator view: no battle board and no
+fire action. They never receive another player's fleet, and the Host rejects
+any fire command from them with `NOT_YOUR_TURN`.
 
 ### The turn deadline
 

@@ -121,7 +121,7 @@
   "lobbySubtitle": "Seats, readiness and starting the match",
   "shipPlacement": "Ship Placement",
   "shipPlacementSubtitle": "Arrange your private fleet before the match",
-  "battleSubtitle": "Turn-based combat on the target board",
+  "battleSubtitle": "Turn-based combat on one shared map",
   "profileAndSettings": "Profile & Settings",
   "profileAndSettingsSubtitle": "Nickname, avatar, sound, haptics and language",
   "inRoomOnly": "Create or join a room first.",
@@ -327,7 +327,11 @@
   "youWillLeaveMatch": "You will leave this match.",
   "target": "Target",
   "noTargetsLeft": "There is nobody left to shoot at.",
-  "boardLegend": "Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk",
+  "sharedMapTitle": "Shared map",
+  "legendHit": "hit",
+  "legendSunk": "sunk",
+  "legendMiss": "your miss",
+  "closeMatch": "Leave match",
   "selectedCell": "Selected: {cell}",
   "@selectedCell": {
     "placeholders": {
@@ -341,8 +345,7 @@
     }
   },
   "waitingForHost": "Waiting for host…",
-  "doubleTapToFire": "Double-tap a cell to fire at it.",
-  "waitForYourTurn": "Wait for your turn",
+  "doubleTapToFire": "Double-tap a cell to fire at every opponent.",
   "yourTurn": "Your turn",
   "activityMissed": "{attacker} missed {target}.",
   "@activityMissed": {
@@ -381,7 +384,7 @@
   "feedbackOthers": "The other players are shooting at each other.",
   "matchIsOver": "The match is over.",
   "yourBoardUnavailable": "Your board is not available.",
-  "ownBoardHint": "The red cells are the hits on your fleet. Only you and the host see this board.",
+  "ownBoardHint": "The coloured cells are the hits on your fleet, in the colour of the player who fired them. Only you and the host see this board.",
   "turnOrder": "Turn order",
   "inTheMatch": "In the match",
   "eliminated": "Eliminated",
@@ -430,10 +433,10 @@
   "nobodyIsLeft": "Nobody is left.",
   "publicActivity": "Public activity",
   "noPublicShots": "No public shots yet.",
-  "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.",
+  "spectatorHint": "Spectators see no coordinates and no enemy fleet. Your own fleet stays available below.",
 
-  "targetBoardSemantics": "Target board, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.",
-  "@targetBoardSemantics": {
+  "battleMapSemantics": "Battle map with your fleet, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.",
+  "@battleMapSemantics": {
     "placeholders": {
       "rows": { "type": "int" },
       "columns": { "type": "int" }

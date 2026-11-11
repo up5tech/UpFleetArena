@@ -250,7 +250,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Arrange your private fleet before the match';
 
   @override
-  String get battleSubtitle => 'Turn-based combat on the target board';
+  String get battleSubtitle => 'Turn-based combat on one shared map';
 
   @override
   String get profileAndSettings => 'Profile & Settings';
@@ -661,8 +661,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noTargetsLeft => 'There is nobody left to shoot at.';
 
   @override
-  String get boardLegend =>
-      'Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk';
+  String get sharedMapTitle => 'Shared map';
+
+  @override
+  String get legendHit => 'hit';
+
+  @override
+  String get legendSunk => 'sunk';
+
+  @override
+  String get legendMiss => 'your miss';
+
+  @override
+  String get closeMatch => 'Leave match';
 
   @override
   String selectedCell(String cell) {
@@ -678,10 +689,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get waitingForHost => 'Waiting for host…';
 
   @override
-  String get doubleTapToFire => 'Double-tap a cell to fire at it.';
-
-  @override
-  String get waitForYourTurn => 'Wait for your turn';
+  String get doubleTapToFire => 'Double-tap a cell to fire at every opponent.';
 
   @override
   String get yourTurn => 'Your turn';
@@ -735,7 +743,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ownBoardHint =>
-      'The red cells are the hits on your fleet. Only you and the host see this board.';
+      'The coloured cells are the hits on your fleet, in the colour of the player who fired them. Only you and the host see this board.';
 
   @override
   String get turnOrder => 'Turn order';
@@ -813,11 +821,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spectatorHint =>
-      'Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.';
+      'Spectators see no coordinates and no enemy fleet. Your own fleet stays available below.';
 
   @override
-  String targetBoardSemantics(int rows, int columns) {
-    return 'Target board, $rows rows by $columns columns. Tap a cell to select it, double-tap to fire.';
+  String battleMapSemantics(int rows, int columns) {
+    return 'Battle map with your fleet, $rows rows by $columns columns. Tap a cell to select it, double-tap to fire.';
   }
 
   @override

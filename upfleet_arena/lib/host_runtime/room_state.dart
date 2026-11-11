@@ -149,8 +149,18 @@ class HostMatchState {
   }
 
   /// Records one accepted shot and breaks the timeout streak of the shooter.
-  void recordShot(String playerId, ShotResult result) {
-    (stats[playerId] ??= PlayerMatchStats()).recordShot(result);
+  ///
+  /// A shot is resolved against every living opponent, so it counts once and
+  /// counts as a hit as soon as one fleet had a ship on the cell.
+  void recordVolley(
+    String playerId, {
+    required bool hit,
+    required int shipsSunk,
+  }) {
+    (stats[playerId] ??= PlayerMatchStats()).recordVolley(
+      hit: hit,
+      shipsSunk: shipsSunk,
+    );
     _timeoutStreaks[playerId] = 0;
   }
 
@@ -180,6 +190,20 @@ class HostMatchState {
   /// cell with the result of the shot.
   final Map<String, Map<String, Map<CellCoord, ShotResult>>> attackHistory =
       <String, Map<String, Map<CellCoord, ShotResult>>>{};
+
+  /// Whether the player already fired at the cell.
+  ///
+  /// Every shot is resolved against all living opponents, so the shared map
+  /// allows each attacker one shot per cell in total.
+  bool hasFiredAt(String playerId, CellCoord cell) {
+    final Map<String, Map<CellCoord, ShotResult>>? targets =
+        attackHistory[playerId];
+    if (targets == null) return false;
+    for (final Map<CellCoord, ShotResult> shots in targets.values) {
+      if (shots.containsKey(cell)) return true;
+    }
+    return false;
+  }
 
   /// How often a player ran out of time.
   final Map<String, int> timeouts = <String, int>{};

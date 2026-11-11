@@ -20,7 +20,7 @@ Widget _wrap(Widget child) => MaterialApp(
 );
 
 void main() {
-  testWidgets('the target board exposes a descriptive semantic label', (
+  testWidgets('the battle map exposes a descriptive semantic label', (
     WidgetTester tester,
   ) async {
     final SemanticsHandle handle = tester.ensureSemantics();
@@ -30,8 +30,8 @@ void main() {
 
     expect(
       find.bySemanticsLabel(
-        'Target board, 10 rows by 10 columns. Tap a cell to select it, '
-        'double-tap to fire.',
+        'Battle map with your fleet, 10 rows by 10 columns. Tap a cell to '
+        'select it, double-tap to fire.',
       ),
       findsOneWidget,
     );
@@ -62,9 +62,7 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         locale: const Locale('vi'),
-        home: const Scaffold(
-          body: BoardCanvas(rows: 8, columns: 8, ships: []),
-        ),
+        home: const Scaffold(body: BoardCanvas(rows: 8, columns: 8, ships: [])),
       ),
     );
 

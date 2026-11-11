@@ -23,9 +23,28 @@ enum ShotResult {
   String get wire => name;
 }
 
+/// Orders the outcomes of a shot from no effect to the strongest.
+int shotResultStrength(ShotResult result) => switch (result) {
+  ShotResult.miss => 0,
+  ShotResult.hit => 1,
+  ShotResult.shipSunk => 2,
+};
+
+/// The stronger of two outcomes of the same shot.
+///
+/// One shot is resolved against every living fleet at the same cell. The
+/// shared map keeps a single mark per shooter and cell, so it carries the
+/// strongest outcome: a sunk ship is never hidden by a miss elsewhere.
+ShotResult strongerShotResult(ShotResult a, ShotResult b) =>
+    shotResultStrength(a) >= shotResultStrength(b) ? a : b;
+
 /// One ship on a board, with the cells that were hit.
 class ShipState {
-  ShipState({required this.shipId, required this.length, required this.placement});
+  ShipState({
+    required this.shipId,
+    required this.length,
+    required this.placement,
+  });
 
   /// The stable identifier of the ship inside its fleet.
   final String shipId;
@@ -46,9 +65,8 @@ class ShipState {
   bool get isSunk => hitCells.length >= length;
 
   /// The cells of the ship that are still free.
-  List<CellCoord> get freeCells => cells
-      .where((CellCoord cell) => !hitCells.contains(cell))
-      .toList();
+  List<CellCoord> get freeCells =>
+      cells.where((CellCoord cell) => !hitCells.contains(cell)).toList();
 }
 
 /// The board of one player, as the Host owns it.
@@ -76,7 +94,8 @@ class PlayerBoard {
   final Set<CellCoord> shotsReceived = <CellCoord>{};
 
   /// The number of ships that were sunk.
-  int get sunkCount => ships.values.where((ShipState ship) => ship.isSunk).length;
+  int get sunkCount =>
+      ships.values.where((ShipState ship) => ship.isSunk).length;
 
   /// The number of cells of the fleet that are still free.
   int get remainingCells => ships.values.fold(

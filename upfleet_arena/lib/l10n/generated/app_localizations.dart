@@ -527,7 +527,7 @@ abstract class AppLocalizations {
   /// No description provided for @battleSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Turn-based combat on the target board'**
+  /// **'Turn-based combat on one shared map'**
   String get battleSubtitle;
 
   /// No description provided for @profileAndSettings.
@@ -1238,11 +1238,35 @@ abstract class AppLocalizations {
   /// **'There is nobody left to shoot at.'**
   String get noTargetsLeft;
 
-  /// No description provided for @boardLegend.
+  /// No description provided for @sharedMapTitle.
   ///
   /// In en, this message translates to:
-  /// **'Faded ships: your fleet · Dot: miss · Filled dot: hit · Ring: sunk'**
-  String get boardLegend;
+  /// **'Shared map'**
+  String get sharedMapTitle;
+
+  /// No description provided for @legendHit.
+  ///
+  /// In en, this message translates to:
+  /// **'hit'**
+  String get legendHit;
+
+  /// No description provided for @legendSunk.
+  ///
+  /// In en, this message translates to:
+  /// **'sunk'**
+  String get legendSunk;
+
+  /// No description provided for @legendMiss.
+  ///
+  /// In en, this message translates to:
+  /// **'your miss'**
+  String get legendMiss;
+
+  /// No description provided for @closeMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave match'**
+  String get closeMatch;
 
   /// No description provided for @selectedCell.
   ///
@@ -1265,14 +1289,8 @@ abstract class AppLocalizations {
   /// No description provided for @doubleTapToFire.
   ///
   /// In en, this message translates to:
-  /// **'Double-tap a cell to fire at it.'**
+  /// **'Double-tap a cell to fire at every opponent.'**
   String get doubleTapToFire;
-
-  /// No description provided for @waitForYourTurn.
-  ///
-  /// In en, this message translates to:
-  /// **'Wait for your turn'**
-  String get waitForYourTurn;
 
   /// No description provided for @yourTurn.
   ///
@@ -1361,7 +1379,7 @@ abstract class AppLocalizations {
   /// No description provided for @ownBoardHint.
   ///
   /// In en, this message translates to:
-  /// **'The red cells are the hits on your fleet. Only you and the host see this board.'**
+  /// **'The coloured cells are the hits on your fleet, in the colour of the player who fired them. Only you and the host see this board.'**
   String get ownBoardHint;
 
   /// No description provided for @turnOrder.
@@ -1493,14 +1511,14 @@ abstract class AppLocalizations {
   /// No description provided for @spectatorHint.
   ///
   /// In en, this message translates to:
-  /// **'Spectators see no coordinates and no enemy fleet. Your own board stays available in the next tab.'**
+  /// **'Spectators see no coordinates and no enemy fleet. Your own fleet stays available below.'**
   String get spectatorHint;
 
-  /// No description provided for @targetBoardSemantics.
+  /// No description provided for @battleMapSemantics.
   ///
   /// In en, this message translates to:
-  /// **'Target board, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.'**
-  String targetBoardSemantics(int rows, int columns);
+  /// **'Battle map with your fleet, {rows} rows by {columns} columns. Tap a cell to select it, double-tap to fire.'**
+  String battleMapSemantics(int rows, int columns);
 
   /// No description provided for @ownBoardSemantics.
   ///

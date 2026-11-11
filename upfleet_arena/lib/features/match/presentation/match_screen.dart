@@ -7,7 +7,6 @@ import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/services/match_feedback.dart';
-import '../../../core/settings/feedback_settings.dart';
 import '../../../game_engine/board/board.dart';
 import '../../../game_engine/combat/combat.dart';
 import '../../../game_engine/placement/placement.dart';
@@ -15,7 +14,11 @@ import '../../../shared/models/match_models.dart';
 import '../../../shared/widgets/board_canvas.dart';
 import '../../rooms/domain/room_session_controller.dart';
 import '../widgets/battle_board.dart';
+import '../widgets/match_panel.dart';
+import '../widgets/shooter_colors.dart';
+import '../widgets/shooter_dot.dart';
 import '../widgets/spectator_view.dart';
+import '../widgets/turn_strip.dart';
 import '../widgets/turn_warning.dart';
 
 /// From this width the match uses side-by-side columns instead of tabs.
@@ -32,10 +35,7 @@ class MatchScreen extends ConsumerStatefulWidget {
   ConsumerState<MatchScreen> createState() => _MatchScreenState();
 }
 
-class _MatchScreenState extends ConsumerState<MatchScreen>
-    with SingleTickerProviderStateMixin {
-  TabController? _tabs;
-  String? _selectedTargetId;
+class _MatchScreenState extends ConsumerState<MatchScreen> {
   CellCoord? _selectedCell;
   Timer? _ticker;
 
@@ -55,7 +55,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
   @override
   void dispose() {
     _ticker?.cancel();
-    _tabs?.dispose();
     super.dispose();
   }
 
@@ -96,9 +95,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     ref.listen(roomSessionControllerProvider, (previous, next) {
       if (previous?.matchSnapshot?.turnNumber !=
               next.matchSnapshot?.turnNumber ||
-          previous?.matchSnapshot?.matchId != next.matchSnapshot?.matchId ||
-          next.matchSnapshot?.targetById(_selectedTargetId ?? '')?.alive ==
-              false) {
+          previous?.matchSnapshot?.matchId != next.matchSnapshot?.matchId) {
         setState(() => _selectedCell = null);
       }
 
@@ -118,8 +115,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     // The match no longer uses tabs: the player list is always part of the
     // same scroll (beside the boards on wide screens, below them on narrow
     // ones), so it stays reachable without switching views.
-    final FeedbackSettings settings = ref.watch(feedbackSettingsProvider);
-    final bool reducedMotion = useReducedMotion(context, settings);
     final bool isMyTurn =
         session.isInRoom &&
         snapshot.winnerPlayerId == null &&
@@ -127,11 +122,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
         snapshot.playerById(session.playerId ?? '')?.alive == true;
     final int? remaining = session.turnCountdown?.remaining;
 
-    final List<TargetBoardView> living = snapshot.livingTargets;
-    final String? targetId =
-        living.any((target) => target.playerId == _selectedTargetId)
-        ? _selectedTargetId
-        : living.firstOrNull?.playerId;
     final bool spectating = session.isSpectating;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,36 +139,34 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
       session: session,
     );
     final Widget mainView = spectating
-        ? SpectatorView(
-            snapshot: snapshot,
-            session: session,
-            footer: ownFleet,
-          )
+        ? SpectatorView(snapshot: snapshot, session: session, footer: ownFleet)
         : _BattleTab(
             snapshot: snapshot,
             session: session,
             isMyTurn: isMyTurn,
             remaining: remaining,
-            selectedTargetId: targetId,
             selectedCell: _selectedCell,
-            reducedMotion: reducedMotion,
             sidePanel: players,
-            onTargetSelected: (String targetId) {
-              setState(() {
-                _selectedTargetId = targetId;
-                _selectedCell = null;
-              });
-            },
             onCellTapped: (CellCoord cell) {
               setState(() => _selectedCell = cell);
             },
             onCellDoubleTapped: (CellCoord cell) {
-              if (targetId != null) unawaited(_fireAt(targetId, cell));
+              unawaited(_fireAt(cell));
             },
           );
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.theMatch)),
+      appBar: AppBar(
+        title: Text(l10n.theMatch),
+        actions: <Widget>[
+          if (session.isInRoom)
+            IconButton(
+              tooltip: l10n.closeMatch,
+              onPressed: () => _exit(session),
+              icon: const Icon(Icons.close),
+            ),
+        ],
+      ),
       body: SafeArea(child: mainView),
     );
   }
@@ -242,12 +230,12 @@ class _MatchScreenState extends ConsumerState<MatchScreen>
     if (mounted) context.go('/');
   }
 
-  Future<void> _fireAt(String targetId, CellCoord cell) async {
+  Future<void> _fireAt(CellCoord cell) async {
     ref.read(matchFeedbackProvider).fire();
     setState(() => _selectedCell = null);
     await ref
         .read(roomSessionControllerProvider.notifier)
-        .fire(targetPlayerId: targetId, row: cell.row, column: cell.column);
+        .fire(row: cell.row, column: cell.column);
   }
 }
 
@@ -257,11 +245,8 @@ class _BattleTab extends StatelessWidget {
     required this.session,
     required this.isMyTurn,
     required this.remaining,
-    required this.selectedTargetId,
     required this.selectedCell,
-    required this.reducedMotion,
     this.sidePanel,
-    required this.onTargetSelected,
     required this.onCellTapped,
     required this.onCellDoubleTapped,
   });
@@ -270,178 +255,177 @@ class _BattleTab extends StatelessWidget {
   final RoomSessionState session;
   final bool isMyTurn;
   final int? remaining;
-  final String? selectedTargetId;
   final CellCoord? selectedCell;
-  final bool reducedMotion;
 
-  /// Extra column shown next to the fleets, e.g. the player list.
+  /// Extra column shown next to the map, e.g. the player list.
   final Widget? sidePanel;
 
-  final ValueChanged<String> onTargetSelected;
   final ValueChanged<CellCoord> onCellTapped;
   final ValueChanged<CellCoord> onCellDoubleTapped;
+
+  /// Whether the viewer already fired at [cell] on the shared map.
+  bool _firedAt(String viewerId, CellCoord cell) => snapshot.mapShots.any(
+    (ShotView shot) =>
+        shot.attackerPlayerId == viewerId &&
+        shot.row == cell.row &&
+        shot.column == cell.column,
+  );
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final List<TargetBoardView> targets = snapshot.livingTargets;
-    final TargetBoardView? target = selectedTargetId == null
-        ? null
-        : snapshot.targetById(selectedTargetId!);
+    final bool canInteract = isMyTurn && !session.firePending && remaining != 0;
+    final Map<String, Color> shooterColors = ShooterColors.of(snapshot.players);
+    final String viewerId = session.playerId ?? '';
+    final bool hasOpponents = snapshot.players.any(
+      (MatchPlayerView player) => player.playerId != viewerId && player.alive,
+    );
 
     final bool alreadyFired =
-        target != null &&
-        selectedCell != null &&
-        target.shots.any(
+        selectedCell != null && _firedAt(viewerId, selectedCell!);
+    // A miss by another player leaves no mark on the map: the room does not
+    // need it, and hiding it keeps the hits readable. Only the shooter keeps
+    // their own misses, as a reminder of the cells they already fired at.
+    final List<ShotView> marks = snapshot.mapShots
+        .where(
           (ShotView shot) =>
-              shot.row == selectedCell!.row &&
-              shot.column == selectedCell!.column,
-        );
-    final bool canInteract = isMyTurn && !session.firePending && remaining != 0;
-    /// Fires at a double-tapped cell, unless the cell was already fired at.
-    void onDoubleTapped(CellCoord cell) {
-      final bool fired = target!.shots.any(
-        (ShotView shot) => shot.row == cell.row && shot.column == cell.column,
-      );
-      if (canInteract && target.alive && !fired) onCellDoubleTapped(cell);
-    }
+              shot.result != ShotResult.miss ||
+              shot.attackerPlayerId == viewerId,
+        )
+        .toList();
 
-    final OwnBoardView? ownBoard = snapshot.ownBoard;
+    final bool finished = snapshot.winnerPlayerId != null;
 
-    final List<Widget> header = <Widget>[
-      if (snapshot.winnerPlayerId != null) ...<Widget>[
-        _WinnerCard(
-          winnerPlayerId: snapshot.winnerPlayerId!,
-          viewerPlayerId: session.playerId ?? '',
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (session.combatError != null) ...[
-        Text(
-          session.combatError!,
-          style: const TextStyle(color: AppTheme.danger),
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (session.lastActivity case final PublicActivity activity) ...[
-        Text(_activityText(activity, l10n)),
-        const SizedBox(height: 12),
-      ],
-      // Turn status and shot feedback float above the board instead of
-      // taking up rows in the scroll, so the match view stays compact.
-    ];
+    // Whose turn it is, with the clock: a single strip above the map, so
+    // nothing floats over the board or hides the player list.
+    final Widget? status = finished
+        ? null
+        : TurnStrip(
+            isMyTurn: isMyTurn,
+            activePlayerName:
+                snapshot.playerById(snapshot.activePlayerId)?.displayName ?? '',
+            remaining: remaining,
+            turnNumber: snapshot.turnNumber,
+          );
 
-    final Widget attack = Column(
+    final Widget map = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SizedBox(height: 16),
-        Text(l10n.target, style: Theme.of(context).textTheme.titleMedium),
+        Row(
+          children: <Widget>[
+            Icon(Icons.grid_on, size: 16, color: AppTheme.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              l10n.sharedMapTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
-        if (targets.isEmpty)
+        if (!hasOpponents)
           Text(l10n.noTargetsLeft)
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              for (final TargetBoardView opponent in targets)
-                ChoiceChip(
-                  label: Text(opponent.displayName),
-                  // The chip theme forces light labels, which is unreadable on
-                  // the amber selected background.
-                  labelStyle: opponent.playerId == selectedTargetId
-                      ? TextStyle(
-                          color: Theme.of(context).colorScheme.onSecondary,
-                        )
-                      : null,
-                  selected: opponent.playerId == selectedTargetId,
-                  onSelected: canInteract
-                      ? (_) => onTargetSelected(opponent.playerId)
-                      : null,
-                ),
-            ],
-          ),
-        const SizedBox(height: 16),
-        if (target != null)
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final double width = constraints.maxWidth;
-              final int rows = session.snapshot?.config.rows ?? 10;
-              final int columns = session.snapshot?.config.columns ?? 10;
-              return SizedBox(
-                width: width,
-                height: width * rows / columns,
-                child: BattleBoard(
-                  rows: rows,
-                  columns: columns,
-                  shots: target.shots,
-                  // The own fleet is part of the same board, faded, so the
-                  // screen keeps a single grid instead of two boards.
-                  ownShips:
-                      ownBoard?.ships
-                          .map(
-                            (ShipView ship) => ShipPlacement(
+        else ...<Widget>[
+          MatchPanel(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final double width = constraints.maxWidth;
+                    final int rows = session.snapshot?.config.rows ?? 10;
+                    final int columns =
+                        session.snapshot?.config.columns ?? 10;
+                    final OwnBoardView? own = snapshot.ownBoard;
+                    return SizedBox(
+                      width: width,
+                      height: width * rows / columns,
+                      child: BattleBoard(
+                        rows: rows,
+                        columns: columns,
+                        // The own fleet and every shot share this one map.
+                        ships: <ShipPlacement>[
+                          for (final ShipView ship
+                              in own?.ships ?? const <ShipView>[])
+                            ShipPlacement(
                               shipId: ship.shipId,
                               length: ship.length,
                               orientation: ship.orientation,
                               row: ship.row,
                               column: ship.column,
                             ),
-                          )
-                          .toList() ??
-                      const <ShipPlacement>[],
-                  ownSunkShips:
-                      ownBoard?.ships
-                          .where((ShipView ship) => ship.sunk)
-                          .map((ShipView ship) => ship.shipId)
-                          .toSet() ??
-                      const <String>{},
-                  selectedCell: selectedCell,
-                  enabled: canInteract,
-                  onCellTapped: onCellTapped,
-                  onCellDoubleTapped: onDoubleTapped,
+                        ],
+                        sunkShips: <String>{
+                          for (final ShipView ship
+                              in own?.ships ?? const <ShipView>[])
+                            if (ship.sunk) ship.shipId,
+                        },
+                        // The own sunk hulls are already drawn above, so only
+                        // the fleet of an opponent is outlined here.
+                        sunkOpponentShips: <SunkShipView>[
+                          for (final SunkShipView sunk in snapshot.sunkShips)
+                            if (sunk.ownerPlayerId != viewerId) sunk,
+                        ],
+                        shots: marks,
+                        shooterColors: shooterColors,
+                        selectedCell: selectedCell,
+                        enabled: canInteract,
+                        onCellTapped: onCellTapped,
+                        onCellDoubleTapped: (CellCoord cell) {
+                          if (canInteract && !_firedAt(viewerId, cell)) {
+                            onCellDoubleTapped(cell);
+                          }
+                        },
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+                const SizedBox(height: 10),
+                const _MapLegend(),
+              ],
+            ),
           ),
-        const SizedBox(height: 8),
-        Text(l10n.boardLegend),
-        if (selectedCell != null)
-          Text(
-            alreadyFired
-                ? l10n.selectedCellAlreadyFired(
-                    '${String.fromCharCode(65 + selectedCell!.column)}${selectedCell!.row + 1}',
-                  )
-                : l10n.selectedCell(
-                    '${String.fromCharCode(65 + selectedCell!.column)}${selectedCell!.row + 1}',
-                  ),
-          ),
-        const SizedBox(height: 16),
-        if (snapshot.winnerPlayerId == null)
-          Row(
-            children: <Widget>[
-              Icon(
-                session.firePending
-                    ? Icons.hourglass_empty
-                    : isMyTurn
-                    ? Icons.touch_app_outlined
-                    : Icons.hourglass_empty,
-                size: 16,
-                color: isMyTurn ? AppTheme.accent : AppTheme.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
+          if (!finished && (session.firePending || isMyTurn)) ...<Widget>[
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Icon(
                   session.firePending
-                      ? l10n.waitingForHost
-                      : isMyTurn
-                      ? l10n.doubleTapToFire
-                      : l10n.waitForYourTurn,
-                  style: Theme.of(context).textTheme.bodySmall,
+                      ? Icons.hourglass_empty
+                      : Icons.touch_app_outlined,
+                  size: 15,
+                  color: AppTheme.accent,
                 ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    session.firePending
+                        ? l10n.waitingForHost
+                        : l10n.doubleTapToFire,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (selectedCell != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              alreadyFired
+                  ? l10n.selectedCellAlreadyFired(
+                      '${String.fromCharCode(65 + selectedCell!.column)}${selectedCell!.row + 1}',
+                    )
+                  : l10n.selectedCell(
+                      '${String.fromCharCode(65 + selectedCell!.column)}${selectedCell!.row + 1}',
+                    ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: alreadyFired ? AppTheme.sunk : AppTheme.textPrimary,
               ),
-            ],
-          ),
+            ),
+          ],
+        ],
       ],
     );
 
@@ -449,67 +433,56 @@ class _BattleTab extends StatelessWidget {
       builder: (BuildContext context, BoxConstraints constraints) {
         // Wide screens put the player list next to the board.
         final bool sideBySide = constraints.maxWidth >= _wideLayoutWidth;
-        return Stack(
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: <Widget>[
-            ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-              children: <Widget>[
-                ...header,
-                if (sideBySide)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(child: attack),
-                      if (sidePanel case final Widget panel) ...<Widget>[
-                        const SizedBox(width: 16),
-                        Expanded(child: panel),
-                      ],
-                    ],
-                  )
-                else ...<Widget>[
-                  attack,
-                  if (sidePanel case final Widget panel) ...<Widget>[
-                    const SizedBox(height: 24),
-                    panel,
-                  ],
-                ],
-              ],
-            ),
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: Material(
-                elevation: 6,
-                borderRadius: BorderRadius.circular(12),
-                color: AppTheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      if (snapshot.winnerPlayerId == null)
-                        _TurnCard(
-                          isMyTurn: isMyTurn,
-                          activePlayerName:
-                              snapshot.playerById(snapshot.activePlayerId)?.displayName ??
-                                  '',
-                          remaining: remaining,
-                          turnNumber: snapshot.turnNumber,
-                        ),
-                      if (session.lastShot != null) ...<Widget>[
-                        const SizedBox(height: 8),
-                        _FeedbackCard(
-                          feedback: session.lastShot!,
-                          viewerPlayerId: session.playerId,
-                        ),
-                      ],
-                    ],
-                  ),
+            if (status case final Widget strip) ...<Widget>[
+              strip,
+              const SizedBox(height: 12),
+            ],
+            if (finished) ...<Widget>[
+              _WinnerCard(
+                winnerPlayerId: snapshot.winnerPlayerId!,
+                viewerPlayerId: viewerId,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (session.combatError != null) ...<Widget>[
+              Text(
+                session.combatError!,
+                style: const TextStyle(color: AppTheme.danger),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (session.lastActivity case final PublicActivity activity) ...<Widget>[
+              Text(
+                _activityText(activity, l10n),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.textSecondary,
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+            ],
+            if (sideBySide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // The map is the focus of the match, so it takes the larger
+                  // share of a wide screen.
+                  Expanded(flex: 3, child: map),
+                  if (sidePanel case final Widget panel) ...<Widget>[
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: panel),
+                  ],
+                ],
+              )
+            else ...<Widget>[
+              map,
+              if (sidePanel case final Widget panel) ...<Widget>[
+                const SizedBox(height: 16),
+                panel,
+              ],
+            ],
           ],
         );
       },
@@ -532,7 +505,103 @@ class _BattleTab extends StatelessWidget {
   }
 }
 
-/// The viewer's own fleet, embedded in the battle view.
+/// What the marks of the map mean, as three short glyphs.
+///
+/// The colour of a mark belongs to its shooter, and every player already
+/// carries that colour in the roster, so the legend needs no names.
+class _MapLegend extends StatelessWidget {
+  const _MapLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Wrap(
+      spacing: 14,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        _LegendItem(glyph: _MarkGlyph.hit, label: l10n.legendHit),
+        _LegendItem(glyph: _MarkGlyph.sunk, label: l10n.legendSunk),
+        _LegendItem(glyph: _MarkGlyph.miss, label: l10n.legendMiss),
+      ],
+    );
+  }
+}
+
+/// One glyph of the map legend with its label.
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.glyph, required this.label});
+
+  final _MarkGlyph glyph;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _MarkGlyphPainter(glyph: glyph),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The shapes the shared map uses for a hit, a sunk ship and a miss.
+enum _MarkGlyph { hit, sunk, miss }
+
+/// Draws one legend glyph in the neutral text colour, so the legend never
+/// pretends to be a player colour.
+class _MarkGlyphPainter extends StatelessWidget {
+  const _MarkGlyphPainter({required this.glyph});
+
+  final _MarkGlyph glyph;
+
+  @override
+  Widget build(BuildContext context) {
+    const double size = 12;
+    final Color colour = AppTheme.textSecondary;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: switch (glyph) {
+        _MarkGlyph.hit => DecoratedBox(
+          decoration: BoxDecoration(shape: BoxShape.circle, color: colour),
+        ),
+        _MarkGlyph.sunk => DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: colour, width: 2.5),
+          ),
+          child: Center(
+            child: Container(
+              width: 3.5,
+              height: 3.5,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.surface,
+              ),
+            ),
+          ),
+        ),
+        _MarkGlyph.miss => DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: colour, width: 1.5),
+          ),
+        ),
+      },
+    );
+  }
+}
+
+/// The viewer's own fleet, shown to a player who already lost.
 class _OwnFleetSection extends StatelessWidget {
   const _OwnFleetSection({required this.snapshot, required this.session});
 
@@ -545,60 +614,96 @@ class _OwnFleetSection extends StatelessWidget {
     final OwnBoardView? board = snapshot.ownBoard;
     final int rows = session.snapshot?.config.rows ?? 10;
     final int columns = session.snapshot?.config.columns ?? 10;
+    final Map<String, Color> shooterColors = ShooterColors.of(snapshot.players);
+
+    // The own board shows the hits in the colour of the player who fired
+    // them, so the fleet reads like the shared map.
+    final Map<CellCoord, Color> hitColors = <CellCoord, Color>{};
+    for (final ShotView shot in board?.receivedShots ?? const <ShotView>[]) {
+      if (shot.result == ShotResult.miss) continue;
+      hitColors[shot.cell] = ShooterColors.ofPlayer(
+        shooterColors,
+        shot.attackerPlayerId,
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(l10n.yourFleet, style: Theme.of(context).textTheme.titleMedium),
+        Row(
+          children: <Widget>[
+            const Icon(
+              Icons.directions_boat_outlined,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(l10n.yourFleet, style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
         const SizedBox(height: 8),
-        if (board == null)
-          Text(l10n.yourBoardUnavailable)
-        else ...<Widget>[
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              final double width = constraints.maxWidth;
-              return SizedBox(
-                width: width,
-                height: width * rows / columns,
-                child: BoardCanvas(
-                  rows: rows,
-                  columns: columns,
-                  ships: board.ships
-                      .map(
-                        (ShipView ship) => ShipPlacement(
-                          shipId: ship.shipId,
-                          length: ship.length,
-                          orientation: ship.orientation,
-                          row: ship.row,
-                          column: ship.column,
-                        ),
-                      )
-                      .toList(),
-                  sunkShips: board.ships
-                      .where((ShipView ship) => ship.sunk)
-                      .map((ShipView ship) => ship.shipId)
-                      .toSet(),
-                  shots: board.ships
-                      .expand((ShipView ship) => ship.hitCells)
-                      .toList(),
-                  misses: board.shotsReceived
-                      .where(
-                        (CellCoord cell) => !board.ships.any(
-                          (ShipView ship) => ship.hitCells.contains(cell),
-                        ),
-                      )
-                      .toList(),
+        MatchPanel(
+          padding: const EdgeInsets.all(10),
+          child: board == null
+              ? Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text(l10n.yourBoardUnavailable),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    LayoutBuilder(
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                            final double width = constraints.maxWidth;
+                            return SizedBox(
+                              width: width,
+                              height: width * rows / columns,
+                              child: BoardCanvas(
+                                rows: rows,
+                                columns: columns,
+                                ships: board.ships
+                                    .map(
+                                      (ShipView ship) => ShipPlacement(
+                                        shipId: ship.shipId,
+                                        length: ship.length,
+                                        orientation: ship.orientation,
+                                        row: ship.row,
+                                        column: ship.column,
+                                      ),
+                                    )
+                                    .toList(),
+                                sunkShips: board.ships
+                                    .where((ShipView ship) => ship.sunk)
+                                    .map((ShipView ship) => ship.shipId)
+                                    .toSet(),
+                                shots: board.ships
+                                    .expand((ShipView ship) => ship.hitCells)
+                                    .toList(),
+                                shotColors: hitColors,
+                                misses: board.shotsReceived
+                                    .where(
+                                      (CellCoord cell) => !board.ships.any(
+                                        (ShipView ship) =>
+                                            ship.hitCells.contains(cell),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            );
+                          },
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      l10n.ownBoardHint,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.ownBoardHint,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(height: 1.35),
-          ),
-        ],
+        ),
       ],
     );
   }
@@ -618,78 +723,56 @@ class _PlayersSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextTheme text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(l10n.turnOrder, style: text.titleMedium),
-        const SizedBox(height: 6),
-        for (final MatchPlayerView player in snapshot.players)
-          _PlayerRow(
-            player: player,
-            isViewer: player.playerId == session.playerId,
-            isActive: player.playerId == snapshot.activePlayerId,
-            // Only the player whose turn it is carries the clock.
-            remaining:
-                player.playerId == snapshot.activePlayerId &&
-                    snapshot.winnerPlayerId == null
-                ? session.turnCountdown?.remaining
-                : null,
-          ),
-      ],
+    final Map<String, Color> colours = ShooterColors.of(snapshot.players);
+    return MatchPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(l10n.turnOrder, style: text.titleMedium),
+          const SizedBox(height: 8),
+          for (final MatchPlayerView player in snapshot.players)
+            _PlayerRow(
+              player: player,
+              colour: ShooterColors.ofPlayer(colours, player.playerId),
+              isViewer: player.playerId == session.playerId,
+              isActive: player.playerId == snapshot.activePlayerId,
+            ),
+        ],
+      ),
     );
   }
 }
 
 /// One compact line of the player list.
 class _PlayerRow extends StatelessWidget {
-
   const _PlayerRow({
     required this.player,
+    required this.colour,
     required this.isViewer,
     required this.isActive,
-    this.remaining,
   });
 
   final MatchPlayerView player;
+
+  /// The colour this player's marks carry on the shared map.
+  final Color colour;
   final bool isViewer;
   final bool isActive;
-
-  /// Seconds left in the turn, when this is the player whose turn it is.
-  final int? remaining;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextTheme text = Theme.of(context).textTheme;
     final Color status = player.alive ? AppTheme.accent : AppTheme.textSecondary;
-    final bool urgent = isUrgentTurn(remaining);
-    final bool narrow =
-        MediaQuery.sizeOf(context).width < _wideLayoutWidth;
+    final bool narrow = MediaQuery.sizeOf(context).width < _wideLayoutWidth;
+    // The clock lives in the turn strip above the map, so a row only carries
+    // the state that belongs to the player itself.
     final Widget meta = Wrap(
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 6,
       runSpacing: 2,
       children: <Widget>[
-        if (remaining case final int seconds)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(
-                urgent ? Icons.timer_outlined : Icons.hourglass_bottom,
-                size: 12,
-                color: urgent ? AppTheme.danger : AppTheme.accent,
-              ),
-              const SizedBox(width: 2),
-              Text(
-                l10n.secondsShort(seconds),
-                style: text.labelSmall?.copyWith(
-                  color: urgent ? AppTheme.danger : AppTheme.accent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
         Text(
           l10n.shipsLeftCount(player.shipsRemaining),
           style: text.labelSmall?.copyWith(color: status),
@@ -703,27 +786,24 @@ class _PlayerRow extends StatelessWidget {
     );
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-      decoration: urgent
-          ? BoxDecoration(
-              color: AppTheme.danger.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            )
-          : null,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isActive
+            ? AppTheme.accent.withValues(alpha: 0.08)
+            : null,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: <Widget>[
-          // The status keeps a text label for screen readers even though the
-          // line itself only shows the coloured dot.
+          // The dot carries the colour of the player's marks on the shared
+          // map, so the roster doubles as the colour legend. The tooltip
+          // keeps the alive state readable without another icon.
           Tooltip(
             message: player.alive ? l10n.inTheMatch : l10n.eliminated,
-            child: Icon(
-              player.alive ? Icons.circle : Icons.person_off,
-              size: 10,
-              color: status,
-            ),
+            child: ShooterDot(colour: colour, alive: player.alive),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               isViewer
@@ -770,7 +850,7 @@ class _WinnerCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.accent.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.accent.withValues(alpha: 0.5)),
       ),
       child: Row(
@@ -781,149 +861,6 @@ class _WinnerCard extends StatelessWidget {
             child: Text(
               isWinner ? l10n.youWonMatch : l10n.matchIsOver,
               style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TurnCard extends StatelessWidget {
-  const _TurnCard({
-    required this.isMyTurn,
-    required this.activePlayerName,
-    required this.remaining,
-    required this.turnNumber,
-  });
-
-  final bool isMyTurn;
-  final String activePlayerName;
-  final int? remaining;
-  final int turnNumber;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool urgent = isUrgentTurn(remaining);
-    final Color iconColor = urgent
-        ? AppTheme.danger
-        : isMyTurn
-        ? AppTheme.accent
-        : AppTheme.sunk;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: <Widget>[
-            Icon(
-              urgent
-                  ? Icons.timer_outlined
-                  : isMyTurn
-                  ? Icons.gps_fixed
-                  : Icons.hourglass_empty,
-              color: iconColor,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    isMyTurn
-                        ? l10n.yourTurn
-                        : l10n.playerIsShooting(activePlayerName),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: urgent ? AppTheme.danger : null,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    remaining == null
-                        ? l10n.turnLabel(turnNumber)
-                        : l10n.turnLabelWithTime(turnNumber, remaining!),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: urgent ? AppTheme.danger : null,
-                      fontWeight: urgent ? FontWeight.w600 : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FeedbackCard extends StatelessWidget {
-  const _FeedbackCard({required this.feedback, required this.viewerPlayerId});
-
-  final ShotFeedback feedback;
-  final String? viewerPlayerId;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool isAttacker = feedback.attackerPlayerId == viewerPlayerId;
-    final bool isTarget = feedback.targetPlayerId == viewerPlayerId;
-
-    final String text;
-    final Color color;
-    if (isAttacker) {
-      switch (feedback.result) {
-        case ShotResult.miss:
-          text = l10n.feedbackYouMissed;
-          color = AppTheme.miss;
-        case ShotResult.hit:
-          text = l10n.feedbackYouHit;
-          color = AppTheme.hit;
-        case ShotResult.shipSunk:
-          text = l10n.feedbackYouSunk;
-          color = AppTheme.sunk;
-      }
-    } else if (isTarget) {
-      switch (feedback.result) {
-        case ShotResult.miss:
-          text = l10n.feedbackTargetMissed;
-          color = AppTheme.miss;
-        case ShotResult.hit:
-          text = l10n.feedbackTargetHit;
-          color = AppTheme.hit;
-        case ShotResult.shipSunk:
-          text = l10n.feedbackTargetSunk;
-          color = AppTheme.sunk;
-      }
-    } else {
-      text = l10n.feedbackOthers;
-      color = AppTheme.textSecondary;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(
-            feedback.result == ShotResult.miss
-                ? Icons.block
-                : Icons.local_fire_department,
-            color: color,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: AppTheme.textPrimary, height: 1.35),
             ),
           ),
         ],

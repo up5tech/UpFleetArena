@@ -69,10 +69,7 @@ class RoomConnectionLostEvent extends RoomClientEvent {
 
 /// A room member lost their connection.
 class RoomPlayerDisconnectedEvent extends RoomClientEvent {
-  const RoomPlayerDisconnectedEvent({
-    required this.playerId,
-    this.displayName,
-  });
+  const RoomPlayerDisconnectedEvent({required this.playerId, this.displayName});
 
   final String playerId;
   final String? displayName;
@@ -80,10 +77,7 @@ class RoomPlayerDisconnectedEvent extends RoomClientEvent {
 
 /// A room member reclaimed their seat.
 class RoomPlayerReconnectedEvent extends RoomClientEvent {
-  const RoomPlayerReconnectedEvent({
-    required this.playerId,
-    this.displayName,
-  });
+  const RoomPlayerReconnectedEvent({required this.playerId, this.displayName});
 
   final String playerId;
   final String? displayName;
@@ -205,9 +199,7 @@ class RoomClientSession {
 
     _errorSubscription = _transport.errors.listen((ProtocolError error) {
       if (_closed) return;
-      _events.add(
-        RoomErrorEvent(code: error.code, message: error.message),
-      );
+      _events.add(RoomErrorEvent(code: error.code, message: error.message));
     });
 
     _frameSubscription = _transport.frames.listen(_handleFrame);
@@ -262,9 +254,7 @@ class RoomClientSession {
 
     _errorSubscription = _transport.errors.listen((ProtocolError error) {
       if (_closed) return;
-      _events.add(
-        RoomErrorEvent(code: error.code, message: error.message),
-      );
+      _events.add(RoomErrorEvent(code: error.code, message: error.message));
     });
 
     _frameSubscription = _transport.frames.listen(_handleFrame);
@@ -335,7 +325,8 @@ class RoomClientSession {
         _matchResults.add(MatchResult.fromJson(message.payload));
       case HostEventType.shotResult:
         _shotFeedbacks.add(ShotFeedback.fromJson(message.payload));
-        if (message.requestId == _pendingFireId && _pendingFire?.isCompleted == false) {
+        if (message.requestId == _pendingFireId &&
+            _pendingFire?.isCompleted == false) {
           _pendingFire!.complete(const <String>[]);
         }
       case HostEventType.publicActivity:
@@ -359,8 +350,7 @@ class RoomClientSession {
       case HostEventType.heartbeat:
         final Object? remaining = message.payload['placementRemainingSeconds'];
         if (remaining is int) _countdowns.add(remaining);
-        final Object? turnRemaining =
-            message.payload['turnRemainingSeconds'];
+        final Object? turnRemaining = message.payload['turnRemainingSeconds'];
         if (turnRemaining is int) _turnCountdowns.add(turnRemaining);
       case HostEventType.playerDisconnected:
         _events.add(
@@ -395,7 +385,8 @@ class RoomClientSession {
         final String code = message.payload['code'] as String? ?? 'UNKNOWN';
         final String text =
             message.payload['message'] as String? ?? 'Something went wrong.';
-        if (message.requestId == _pendingFireId && _pendingFire?.isCompleted == false) {
+        if (message.requestId == _pendingFireId &&
+            _pendingFire?.isCompleted == false) {
           _pendingFire!.complete(<String>[text]);
           requestSnapshot();
           break;
@@ -415,9 +406,7 @@ class RoomClientSession {
       await close();
       return;
     }
-    _transport.send(
-      ProtocolMessage(messageType: ClientMessageType.leave),
-    );
+    _transport.send(ProtocolMessage(messageType: ClientMessageType.leave));
     await close();
   }
 
@@ -433,8 +422,7 @@ class RoomClientSession {
         payload: <String, dynamic>{
           'ships': ships
               .map(
-                (ShipPlacement ship) =>
-                    ShipLayout.fromPlacement(ship).toJson(),
+                (ShipPlacement ship) => ShipLayout.fromPlacement(ship).toJson(),
               )
               .toList(),
         },
@@ -458,21 +446,23 @@ class RoomClientSession {
     );
   }
 
-  /// Fires at a cell of an opponent's board and waits for the Host to
+  /// Fires at a cell of the shared battle map and waits for the Host to
   /// confirm the shot.
   ///
-  /// The answer arrives as `game:shot-result` carrying this request id, so a
-  /// client never has to guess whether its shot was accepted.
+  /// The shot is resolved against every living opponent, so the command names
+  /// no target. The answer arrives as `game:shot-result` carrying this request
+  /// id, so a client never has to guess whether its shot was accepted.
   Future<List<String>> fire({
     required String matchId,
     required int turnNumber,
     required int expectedStateVersion,
-    required String targetPlayerId,
     required int row,
     required int column,
   }) async {
     if (!isConnected) return <String>['The host is not connected.'];
-    if (_pendingFire != null) return <String>['A shot is awaiting confirmation.'];
+    if (_pendingFire != null) {
+      return <String>['A shot is awaiting confirmation.'];
+    }
     final String requestId = 'fire-${++_fireSequence}';
     final Completer<List<String>> pending = Completer<List<String>>();
     _pendingFireId = requestId;
@@ -487,7 +477,6 @@ class RoomClientSession {
           payload: <String, dynamic>{
             'matchId': matchId,
             'turnNumber': turnNumber,
-            'targetPlayerId': targetPlayerId,
             'row': row,
             'column': column,
           },
@@ -560,7 +549,9 @@ class RoomClientSession {
     if (_closed) return;
     _closed = true;
     if (_pendingFire?.isCompleted == false) {
-      _pendingFire!.complete(<String>['The connection to the host was closed.']);
+      _pendingFire!.complete(<String>[
+        'The connection to the host was closed.',
+      ]);
     }
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;

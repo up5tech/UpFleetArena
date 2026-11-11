@@ -9,20 +9,23 @@ import '../../../game_engine/combat/combat.dart';
 import '../../../game_engine/placement/placement.dart';
 import '../../../shared/models/match_models.dart';
 
-/// The board of an opponent, as the shooter sees it.
+/// The single shared battle map.
 ///
-/// The cells that were not fired at stay empty: the shooter never learns
-/// where the ships are (PLAN.md §2.2). The viewer's own fleet is drawn
-/// underneath, faded, so one board carries both the shot map and the fleet
-/// the viewer has to protect.
+/// Every player and the whole of every fleet live on the same board: the own
+/// ships are drawn as hulls, and the shots of everybody are drawn on top of
+/// them. The shape of a mark tells what the shot did (miss, hit, sunk) and
+/// its colour tells who fired it. The ships of the opponents stay hidden:
+/// only the shots are shared (PLAN.md §2.2).
 class BattleBoard extends StatelessWidget {
   const BattleBoard({
     super.key,
     required this.rows,
     required this.columns,
     required this.shots,
-    this.ownShips = const <ShipPlacement>[],
-    this.ownSunkShips = const <String>{},
+    this.ships = const <ShipPlacement>[],
+    this.sunkShips = const <String>{},
+    this.sunkOpponentShips = const <SunkShipView>[],
+    this.shooterColors = const <String, Color>{},
     this.selectedCell,
     this.onCellTapped,
     this.onCellDoubleTapped,
@@ -35,14 +38,24 @@ class BattleBoard extends StatelessWidget {
   /// The number of columns of the board.
   final int columns;
 
-  /// The shots the shooter already fired.
+  /// The own ships, which share the map with every shot.
+  final List<ShipPlacement> ships;
+
+  /// The own ships that were sunk: their hulls are drawn in the sunk colour.
+  final Set<String> sunkShips;
+
+  /// The ships of the opponents that are already sunk.
+  ///
+  /// Their hulls are outlined in the colour of the player who owned them, so
+  /// the room can tell whose fleet lost the ship. Only sunk ships are here: a
+  /// fleet that is still afloat never reaches this widget.
+  final List<SunkShipView> sunkOpponentShips;
+
+  /// The shots of every player, on this board.
   final List<ShotView> shots;
 
-  /// The viewer's own fleet, drawn faded under the shots.
-  final List<ShipPlacement> ownShips;
-
-  /// The viewer's ships that were sunk.
-  final Set<String> ownSunkShips;
+  /// The colour of every shooter, keyed by player id.
+  final Map<String, Color> shooterColors;
 
   /// The cell the shooter picked.
   final CellCoord? selectedCell;
@@ -66,10 +79,7 @@ class BattleBoard extends StatelessWidget {
               ? constraints.maxHeight
               : constraints.maxWidth,
         );
-        final double cellSize = math.min(
-          available / columns,
-          available / rows,
-        );
+        final double cellSize = math.min(available / columns, available / rows);
 
         CellCoord? cellAt(Offset local) {
           final int column = (local.dx / cellSize).floor();
@@ -82,7 +92,8 @@ class BattleBoard extends StatelessWidget {
 
         return Center(
           child: Semantics(
-            label: AppLocalizations.of(context).targetBoardSemantics(rows, columns),
+            label: AppLocalizations.of(context)
+                .battleMapSemantics(rows, columns),
             container: true,
             child: SizedBox(
               width: cellSize * columns,
@@ -111,9 +122,11 @@ class BattleBoard extends StatelessWidget {
                   painter: BattleBoardPainter(
                     rows: rows,
                     columns: columns,
+                    ships: ships,
+                    sunkShips: sunkShips,
+                    sunkOpponentShips: sunkOpponentShips,
                     shots: shots,
-                    ownShips: ownShips,
-                    ownSunkShips: ownSunkShips,
+                    shooterColors: shooterColors,
                     selectedCell: selectedCell,
                   ),
                 ),
@@ -126,14 +139,29 @@ class BattleBoard extends StatelessWidget {
   }
 }
 
-/// Draws the grid, the shots and the picked cell.
+/// The own hulls are drawn faded on the shared map, so the coloured marks of
+/// every shooter stay the first thing the eye reads.
+const double _hullFillOpacity = 0.18;
+const double _hullStrokeOpacity = 0.35;
+const double _sunkHullFillOpacity = 0.14;
+const double _sunkHullStrokeOpacity = 0.3;
+
+/// The hull of a sunk opponent is only an outline, faded like the own fleet,
+/// so it frames the marks without hiding them.
+const double _sunkOpponentOutlineOpacity = 0.5;
+const double _sunkOpponentOutlineWidth = 2;
+
+/// Draws the grid, the own fleet, the shots of every player and the picked
+/// cell.
 class BattleBoardPainter extends CustomPainter {
   const BattleBoardPainter({
     required this.rows,
     required this.columns,
     required this.shots,
-    this.ownShips = const <ShipPlacement>[],
-    this.ownSunkShips = const <String>{},
+    this.ships = const <ShipPlacement>[],
+    this.sunkShips = const <String>{},
+    this.sunkOpponentShips = const <SunkShipView>[],
+    this.shooterColors = const <String, Color>{},
     this.selectedCell,
   });
 
@@ -143,24 +171,27 @@ class BattleBoardPainter extends CustomPainter {
   /// The number of columns of the board.
   final int columns;
 
-  /// The shots the shooter already fired.
+  /// The own ships, which share the map with every shot.
+  final List<ShipPlacement> ships;
+
+  /// The own ships that were sunk.
+  final Set<String> sunkShips;
+
+  /// The ships of the opponents that are already sunk.
+  final List<SunkShipView> sunkOpponentShips;
+
+  /// The shots of every player, on this board.
   final List<ShotView> shots;
 
-  /// The viewer's own fleet, drawn faded under the shots.
-  final List<ShipPlacement> ownShips;
-
-  /// The viewer's ships that were sunk.
-  final Set<String> ownSunkShips;
+  /// The colour of every shooter, keyed by player id.
+  final Map<String, Color> shooterColors;
 
   /// The cell the shooter picked.
   final CellCoord? selectedCell;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double cellSize = math.min(
-      size.width / columns,
-      size.height / rows,
-    );
+    final double cellSize = math.min(size.width / columns, size.height / rows);
     final double offsetX = (size.width - cellSize * columns) / 2;
     final double offsetY = (size.height - cellSize * rows) / 2;
 
@@ -201,64 +232,84 @@ class BattleBoardPainter extends CustomPainter {
         ..strokeWidth = 2,
     );
 
-    // The own fleet stays visible but never competes with the shot markers.
-    for (final ShipPlacement ship in ownShips) {
-      final List<CellCoord> cells = ship.cells;
-      if (cells.isEmpty) continue;
-      final Rect hull = Rect.fromLTRB(
-        offsetX + cells.first.column * cellSize,
-        offsetY + cells.first.row * cellSize,
-        offsetX + (cells.last.column + 1) * cellSize,
-        offsetY + (cells.last.row + 1) * cellSize,
-      );
-      final RRect shape = RRect.fromRectAndRadius(
-        hull.deflate(2),
-        Radius.circular(math.min(8, cellSize * 0.2)),
-      );
-      final bool sunk = ownSunkShips.contains(ship.shipId);
-      final Color color = sunk ? AppTheme.sunk : AppTheme.accent;
-      canvas.drawRRect(
-        shape,
-        Paint()..color = color.withValues(alpha: 0.12),
-      );
-      canvas.drawRRect(
-        shape,
-        Paint()
-          ..color = color.withValues(alpha: 0.38)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
+    // The own fleet shares the map with the shots, so it is drawn first and
+    // the marks land on top of it. The hulls stay faded: the fleet is only
+    // the ground the marks are read against, so it must not compete with the
+    // coloured shots of every player.
+    for (final ShipPlacement ship in ships) {
+      final bool sunk = sunkShips.contains(ship.shipId);
+      _drawShip(
+        canvas,
+        ship,
+        offsetX,
+        offsetY,
+        cellSize,
+        sunk ? AppTheme.sunk : AppTheme.accent,
+        sunk ? _sunkHullFillOpacity : _hullFillOpacity,
+        sunk ? _sunkHullStrokeOpacity : _hullStrokeOpacity,
       );
     }
 
-    for (final ShotView shot in shots) {
-      final Offset center = Offset(
-        offsetX + (shot.column + 0.5) * cellSize,
-        offsetY + (shot.row + 0.5) * cellSize,
+    // A sunk opponent hull is outlined in the colour of its owner and stays
+    // faded, so the fleet reads as "this one is gone" without competing with
+    // the marks of the shots it carries.
+    for (final SunkShipView sunk in sunkOpponentShips) {
+      _drawSunkOpponent(
+        canvas,
+        sunk,
+        offsetX,
+        offsetY,
+        cellSize,
+        shooterColors[sunk.ownerPlayerId] ?? AppTheme.textSecondary,
       );
-      switch (shot.result) {
-        case ShotResult.miss:
-          canvas.drawCircle(
-            center,
-            cellSize * 0.16,
-            Paint()..color = AppTheme.miss,
-          );
-        case ShotResult.hit:
-          canvas.drawCircle(
-            center,
-            cellSize * 0.3,
-            Paint()..color = AppTheme.hit,
-          );
-        case ShotResult.shipSunk:
-          canvas.drawCircle(
-            center,
-            cellSize * 0.34,
-            Paint()..color = AppTheme.sunk,
-          );
-          canvas.drawCircle(
-            center,
-            cellSize * 0.16,
-            Paint()..color = AppTheme.background,
-          );
+    }
+
+    // Group the shots by cell, so that several players firing at the same
+    // cell each get their own visible mark instead of overlapping.
+    final Map<String, List<ShotView>> shotsByCell = <String, List<ShotView>>{};
+    for (final ShotView shot in shots) {
+      shotsByCell
+          .putIfAbsent('${shot.row},${shot.column}', () => <ShotView>[])
+          .add(shot);
+    }
+    for (final MapEntry<String, List<ShotView>> entry in shotsByCell.entries) {
+      final List<ShotView> cellShots = entry.value;
+      final int count = cellShots.length;
+      for (int i = 0; i < count; i++) {
+        final ShotView shot = cellShots[i];
+        final double angle = count == 1 ? 0 : (2 * math.pi * i / count);
+        final double radiusOffset = count == 1 ? 0 : cellSize * 0.18;
+        final Offset center = Offset(
+          offsetX +
+              (shot.column + 0.5) * cellSize +
+              math.cos(angle) * radiusOffset,
+          offsetY +
+              (shot.row + 0.5) * cellSize +
+              math.sin(angle) * radiusOffset,
+        );
+        final Color color =
+            shooterColors[shot.attackerPlayerId] ?? AppTheme.accent;
+        switch (shot.result) {
+          case ShotResult.miss:
+            // A miss is a small hollow ring, so it never looks like a hit.
+            canvas.drawCircle(
+              center,
+              cellSize * 0.13,
+              Paint()
+                ..color = color.withValues(alpha: 0.75)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = math.max(1.5, cellSize * 0.06),
+            );
+          case ShotResult.hit:
+            canvas.drawCircle(center, cellSize * 0.18, Paint()..color = color);
+          case ShotResult.shipSunk:
+            canvas.drawCircle(center, cellSize * 0.22, Paint()..color = color);
+            canvas.drawCircle(
+              center,
+              cellSize * 0.1,
+              Paint()..color = AppTheme.background,
+            );
+        }
       }
     }
 
@@ -280,12 +331,82 @@ class BattleBoardPainter extends CustomPainter {
     }
   }
 
+  /// Outlines the hull of a sunk opponent ship, without filling it.
+  void _drawSunkOpponent(
+    Canvas canvas,
+    SunkShipView ship,
+    double offsetX,
+    double offsetY,
+    double cellSize,
+    Color color,
+  ) {
+    final List<CellCoord> cells = ship.placement.cells;
+    if (cells.isEmpty) return;
+
+    final Rect hull = Rect.fromLTRB(
+      offsetX + cells.first.column * cellSize,
+      offsetY + cells.first.row * cellSize,
+      offsetX + (cells.last.column + 1) * cellSize,
+      offsetY + (cells.last.row + 1) * cellSize,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        hull.deflate(2),
+        Radius.circular(math.min(8, cellSize * 0.2)),
+      ),
+      Paint()
+        ..color = color.withValues(alpha: _sunkOpponentOutlineOpacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _sunkOpponentOutlineWidth,
+    );
+  }
+
+  void _drawShip(
+    Canvas canvas,
+    ShipPlacement ship,
+    double offsetX,
+    double offsetY,
+    double cellSize,
+    Color color,
+    double opacity,
+    double strokeOpacity,
+  ) {
+    final List<CellCoord> cells = ship.cells;
+    if (cells.isEmpty) return;
+
+    final Rect hull = Rect.fromLTRB(
+      offsetX + cells.first.column * cellSize,
+      offsetY + cells.first.row * cellSize,
+      offsetX + (cells.last.column + 1) * cellSize,
+      offsetY + (cells.last.row + 1) * cellSize,
+    );
+    final RRect shape = RRect.fromRectAndRadius(
+      hull.deflate(2),
+      Radius.circular(math.min(8, cellSize * 0.2)),
+    );
+    canvas.drawRRect(
+      shape,
+      Paint()
+        ..color = color.withValues(alpha: opacity)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      shape,
+      Paint()
+        ..color = color.withValues(alpha: strokeOpacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
   @override
   bool shouldRepaint(covariant BattleBoardPainter oldDelegate) =>
       oldDelegate.rows != rows ||
       oldDelegate.columns != columns ||
+      oldDelegate.ships != ships ||
+      oldDelegate.sunkShips != sunkShips ||
+      oldDelegate.sunkOpponentShips != sunkOpponentShips ||
       oldDelegate.shots != shots ||
-      oldDelegate.ownShips != ownShips ||
-      oldDelegate.ownSunkShips != ownSunkShips ||
+      oldDelegate.shooterColors != shooterColors ||
       oldDelegate.selectedCell != selectedCell;
 }

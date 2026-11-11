@@ -71,7 +71,7 @@ flutter run -d <device-id>
 |---|---|---|
 | 3.1 | Compare the spectator's *Spectating* tab with a living player's *Battle* tab | The spectator has no board of any opponent and no selectable cell |
 | 3.2 | The spectator's *Your board* tab | It shows only their own fleet, never another player's |
-| 3.3 | A living player's target board | It still shows only that player's own shots, even after someone was eliminated |
+| 3.3 | A living player's shared map | It still shows the fire of every player, each in their own colour, even after someone was eliminated |
 | 3.4 | The ship counts in the roster | They match the number of ships the public activity already announced as sunk — no extra information |
 
 > The protocol-level checks (an eliminated player firing, a spoofed player

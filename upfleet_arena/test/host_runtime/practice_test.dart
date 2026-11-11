@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:upfleet_arena/game_engine/board/board.dart';
 import 'package:upfleet_arena/game_engine/bot/bot_brain.dart';
-import 'package:upfleet_arena/game_engine/combat/combat.dart';
 import 'package:upfleet_arena/host_runtime/client_connection_registry.dart';
 import 'package:upfleet_arena/host_runtime/room_coordinator.dart';
 import 'package:upfleet_arena/host_runtime/room_state.dart';
@@ -21,16 +20,12 @@ Future<void> _settle() async {
 CellCoord? _firstUnfiredCell(
   HostMatchState match,
   String attackerId,
-  String targetId,
   RoomConfig config,
 ) {
-  final Map<CellCoord, ShotResult> fired =
-      match.attackHistory[attackerId]?[targetId] ??
-      const <CellCoord, ShotResult>{};
   for (int row = 0; row < config.rows; row++) {
     for (int column = 0; column < config.columns; column++) {
       final CellCoord cell = CellCoord(row, column);
-      if (!fired.containsKey(cell)) return cell;
+      if (!match.hasFiredAt(attackerId, cell)) return cell;
     }
   }
   return null;
@@ -126,7 +121,6 @@ void main() {
         final CellCoord? cell = _firstUnfiredCell(
           match,
           room.hostPlayerId,
-          bot.playerId,
           room.config,
         );
         if (cell == null) break;
@@ -135,7 +129,6 @@ void main() {
             matchId: match.matchId,
             turnNumber: match.turnNumber,
             expectedStateVersion: room.stateVersion,
-            targetPlayerId: bot.playerId,
             row: cell.row,
             column: cell.column,
           ),

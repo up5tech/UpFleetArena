@@ -6,17 +6,11 @@ import 'package:upfleet_arena/game_engine/bot/bot_brain.dart';
 import 'package:upfleet_arena/game_engine/combat/combat.dart';
 
 const BoardSize _board = BoardSize(rows: 10, columns: 10);
-const String _target = 'target';
 
-BotShot? _choose(
+CellCoord? _choose(
   BotBrain brain, {
   Map<CellCoord, ShotResult> shots = const <CellCoord, ShotResult>{},
-}) => brain.chooseShot(
-  board: _board,
-  targets: <BotTargetKnowledge>[
-    BotTargetKnowledge(playerId: _target, shots: shots, shipsRemaining: 5),
-  ],
-);
+}) => brain.chooseCell(board: _board, shots: shots);
 
 bool _isNeighbourOfAny(CellCoord cell, Iterable<CellCoord> hits) => hits.any(
   (CellCoord hit) =>
@@ -40,10 +34,12 @@ void main() {
                 CellCoord(row, column): ShotResult.miss,
         };
 
-        final BotShot? shot = _choose(brain, shots: shots);
-        expect(shot, isNotNull, reason: '$difficulty must still fire');
-        expect(shot!.cell, const CellCoord(3, 7));
-        expect(shot.targetPlayerId, _target);
+        final CellCoord? cell = _choose(brain, shots: shots);
+        expect(
+          cell,
+          const CellCoord(3, 7),
+          reason: '$difficulty must still fire',
+        );
       }
     });
 
@@ -70,10 +66,7 @@ void main() {
       );
       final List<CellCoord> cells = <CellCoord>[
         for (int i = 0; i < 20; i++)
-          _choose(
-            brain,
-            shots: <CellCoord, ShotResult>{hit: ShotResult.hit},
-          )!.cell,
+          _choose(brain, shots: <CellCoord, ShotResult>{hit: ShotResult.hit})!,
       ];
       // Purely random shooting mostly lands away from the hit.
       expect(
@@ -92,19 +85,19 @@ void main() {
         const CellCoord(6, 6): ShotResult.hit,
       };
       for (int seed = 0; seed < 10; seed++) {
-        final BotShot shot = _choose(
+        final CellCoord cell = _choose(
           BotBrain(difficulty: BotDifficulty.medium, random: Random(seed)),
           shots: shots,
         )!;
         expect(
-          _isNeighbourOfAny(shot.cell, <CellCoord>[
+          _isNeighbourOfAny(cell, <CellCoord>[
             const CellCoord(2, 2),
             const CellCoord(6, 6),
           ]),
           isTrue,
           reason: 'medium must follow up a hit (seed $seed)',
         );
-        expect(shots.containsKey(shot.cell), isFalse);
+        expect(shots.containsKey(cell), isFalse);
       }
     });
 
@@ -118,11 +111,11 @@ void main() {
         const CellCoord(2, 4),
       };
       for (int seed = 0; seed < 10; seed++) {
-        final BotShot shot = _choose(
+        final CellCoord cell = _choose(
           BotBrain(difficulty: BotDifficulty.hard, random: Random(seed)),
           shots: shots,
         )!;
-        expect(ends.contains(shot.cell), isTrue, reason: 'seed $seed');
+        expect(ends.contains(cell), isTrue, reason: 'seed $seed');
       }
     });
 
@@ -132,7 +125,7 @@ void main() {
         random: Random(5),
       );
       for (int i = 0; i < 30; i++) {
-        final CellCoord cell = _choose(hard)!.cell;
+        final CellCoord cell = _choose(hard)!;
         expect((cell.row + cell.column).isEven, isTrue);
       }
     });
@@ -148,7 +141,7 @@ void main() {
         final CellCoord cell = _choose(
           BotBrain(difficulty: BotDifficulty.medium, random: Random(seed)),
           shots: shots,
-        )!.cell;
+        )!;
         // The only hit worth chasing is the one at (8, 8).
         expect(
           _isNeighbourOfAny(cell, <CellCoord>[const CellCoord(8, 8)]),
