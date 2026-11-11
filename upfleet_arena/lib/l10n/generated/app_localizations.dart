@@ -1472,6 +1472,48 @@ abstract class AppLocalizations {
   /// **'{shots} shots · {hits} hits · {misses} misses · {sunk} sunk · {timeouts} timeouts'**
   String rankingStats(int shots, int hits, int misses, int sunk, int timeouts);
 
+  /// No description provided for @reviewAllFleets.
+  ///
+  /// In en, this message translates to:
+  /// **'Review all fleets'**
+  String get reviewAllFleets;
+
+  /// No description provided for @allFleets.
+  ///
+  /// In en, this message translates to:
+  /// **'All fleets'**
+  String get allFleets;
+
+  /// No description provided for @allFleetsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The match is over, so every fleet is revealed. Each board shows where the ships were and every shot they took.'**
+  String get allFleetsHint;
+
+  /// No description provided for @fleetReviewSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{ships} ships · {sunk} sunk'**
+  String fleetReviewSummary(int ships, int sunk);
+
+  /// No description provided for @fleetsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No fleet was recorded.'**
+  String get fleetsUnavailable;
+
+  /// No description provided for @shootersLegend.
+  ///
+  /// In en, this message translates to:
+  /// **'Shot colours'**
+  String get shootersLegend;
+
+  /// No description provided for @ok.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ok;
+
   /// No description provided for @yourFleetWasSunk.
   ///
   /// In en, this message translates to:
@@ -1483,6 +1525,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You are watching the rest of the match. You cannot fire.'**
   String get spectatorWatching;
+
+  /// No description provided for @keepWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep watching'**
+  String get keepWatching;
 
   /// No description provided for @stillInTheMatch.
   ///

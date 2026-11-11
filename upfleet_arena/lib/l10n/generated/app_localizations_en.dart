@@ -801,11 +801,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get reviewAllFleets => 'Review all fleets';
+
+  @override
+  String get allFleets => 'All fleets';
+
+  @override
+  String get allFleetsHint =>
+      'The match is over, so every fleet is revealed. Each board shows where the ships were and every shot they took.';
+
+  @override
+  String fleetReviewSummary(int ships, int sunk) {
+    return '$ships ships · $sunk sunk';
+  }
+
+  @override
+  String get fleetsUnavailable => 'No fleet was recorded.';
+
+  @override
+  String get shootersLegend => 'Shot colours';
+
+  @override
+  String get ok => 'OK';
+
+  @override
   String get yourFleetWasSunk => 'Your fleet was sunk.';
 
   @override
   String get spectatorWatching =>
       'You are watching the rest of the match. You cannot fire.';
+
+  @override
+  String get keepWatching => 'Keep watching';
 
   @override
   String get stillInTheMatch => 'Still in the match';

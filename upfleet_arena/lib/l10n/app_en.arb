@@ -426,9 +426,23 @@
       "timeouts": { "type": "int" }
     }
   },
+  "reviewAllFleets": "Review all fleets",
+  "allFleets": "All fleets",
+  "allFleetsHint": "The match is over, so every fleet is revealed. Each board shows where the ships were and every shot they took.",
+  "fleetReviewSummary": "{ships} ships · {sunk} sunk",
+  "@fleetReviewSummary": {
+    "placeholders": {
+      "ships": { "type": "int" },
+      "sunk": { "type": "int" }
+    }
+  },
+  "fleetsUnavailable": "No fleet was recorded.",
+  "shootersLegend": "Shot colours",
+  "ok": "OK",
 
   "yourFleetWasSunk": "Your fleet was sunk.",
   "spectatorWatching": "You are watching the rest of the match. You cannot fire.",
+  "keepWatching": "Keep watching",
   "stillInTheMatch": "Still in the match",
   "nobodyIsLeft": "Nobody is left.",
   "publicActivity": "Public activity",

@@ -795,11 +795,38 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get reviewAllFleets => 'Xem lại toàn bộ hạm đội';
+
+  @override
+  String get allFleets => 'Toàn bộ hạm đội';
+
+  @override
+  String get allFleetsHint =>
+      'Trận đấu đã kết thúc nên toàn bộ hạm đội được mở. Mỗi bàn cho thấy vị trí các con tàu và mọi phát bắn vào chúng.';
+
+  @override
+  String fleetReviewSummary(int ships, int sunk) {
+    return '$ships tàu · $sunk chìm';
+  }
+
+  @override
+  String get fleetsUnavailable => 'Không có hạm đội nào được ghi lại.';
+
+  @override
+  String get shootersLegend => 'Màu phát bắn';
+
+  @override
+  String get ok => 'OK';
+
+  @override
   String get yourFleetWasSunk => 'Hạm đội của bạn đã bị chìm.';
 
   @override
   String get spectatorWatching =>
       'Bạn đang xem phần còn lại của trận. Bạn không thể bắn.';
+
+  @override
+  String get keepWatching => 'Xem tiếp trận';
 
   @override
   String get stillInTheMatch => 'Còn trong trận';

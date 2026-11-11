@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/features/match/presentation/match_result_screen.dart';
+import 'package:upfleet_arena/game_engine/board/board.dart';
+import 'package:upfleet_arena/game_engine/placement/placement.dart';
 import 'package:upfleet_arena/features/rooms/domain/room_session_controller.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/models/match_models.dart';
@@ -63,12 +65,37 @@ const MatchResult _result = MatchResult(
   ],
 );
 
+const FinalFleetView _aliceFleet = FinalFleetView(
+  playerId: 'player-1',
+  ships: <ShipView>[
+    ShipView(
+      shipId: 'alice-1',
+      length: 3,
+      orientation: ShipOrientation.horizontal,
+      row: 0,
+      column: 0,
+      hitCells: <CellCoord>[],
+      sunk: false,
+    ),
+    ShipView(
+      shipId: 'alice-2',
+      length: 2,
+      orientation: ShipOrientation.horizontal,
+      row: 2,
+      column: 0,
+      hitCells: <CellCoord>[CellCoord(2, 0), CellCoord(2, 1)],
+      sunk: true,
+    ),
+  ],
+);
+
 RoomSessionState _session({
   String viewer = 'player-1',
   RoomRole role = RoomRole.client,
   RoomSessionStatus status = RoomSessionStatus.inRoom,
   bool hasResult = true,
   int durationSeconds = 272,
+  List<FinalFleetView> fleets = const <FinalFleetView>[],
 }) => RoomSessionState(
   role: role,
   status: status,
@@ -90,6 +117,7 @@ RoomSessionState _session({
           winnerDisplayName: _result.winnerDisplayName,
           durationSeconds: durationSeconds,
           ranking: _result.ranking,
+          fleets: fleets,
         )
       : null,
 );
@@ -151,6 +179,28 @@ void main() {
       find.text('14 shots · 8 hits · 6 misses · 3 sunk · 1 timeouts'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a finished match offers the fleet review', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _FakeSessionController(
+          session: _session(fleets: const <FinalFleetView>[_aliceFleet]),
+        ),
+      ),
+    );
+
+    expect(find.text('Review all fleets'), findsOneWidget);
+  });
+
+  testWidgets('without revealed fleets the review is not offered', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_app(_FakeSessionController(session: _session())));
+
+    expect(find.text('Review all fleets'), findsNothing);
   });
 
   testWidgets('a defeated player sees the name of the winner and their own rank', (

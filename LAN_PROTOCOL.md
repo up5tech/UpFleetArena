@@ -181,7 +181,7 @@ Phase 0 additionally defines `client:ping` as a transport probe, answered with
 | `game:player-disconnected` | Non-host connection status update |
 | `game:player-reconnected` | Non-host reconnection status update |
 | `game:state-snapshot` | Permission-filtered current state |
-| `game:finished` | Winner, ranking and final statistics |
+| `game:finished` | Winner, ranking, final statistics and the revealed fleets |
 | `game:aborted` | Host loss or explicit early termination |
 | `host:heartbeat` | Host liveness signal and current state version |
 | `protocol:error` | Stable error code and safe user-facing message |

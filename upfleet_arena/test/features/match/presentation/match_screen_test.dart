@@ -42,6 +42,7 @@ MatchSnapshot _snapshot({
   bool myTurn = true,
   bool eliminated = false,
   bool thirdPlayer = false,
+  bool viewerFired = true,
   List<SunkShipView> sunkShips = const <SunkShipView>[],
 }) => MatchSnapshot(
   matchId: 'match-1',
@@ -105,12 +106,14 @@ MatchSnapshot _snapshot({
       result: ShotResult.hit,
       attackerPlayerId: 'player-2',
     ),
-    const ShotView(
-      row: 2,
-      column: 3,
-      result: ShotResult.miss,
-      attackerPlayerId: 'player-1',
-    ),
+    // The viewer's own earlier shot, which makes the how-to hint stale.
+    if (viewerFired)
+      const ShotView(
+        row: 2,
+        column: 3,
+        result: ShotResult.miss,
+        attackerPlayerId: 'player-1',
+      ),
     const ShotView(
       row: 5,
       column: 5,
@@ -133,6 +136,7 @@ RoomSessionState _session({
   ShotFeedback? feedback,
   bool eliminated = false,
   bool thirdPlayer = false,
+  bool viewerFired = true,
   List<PublicActivity> activityFeed = const <PublicActivity>[],
   MatchResult? matchResult,
   int turnSeconds = 22,
@@ -154,6 +158,7 @@ RoomSessionState _session({
     myTurn: myTurn,
     eliminated: eliminated,
     thirdPlayer: thirdPlayer,
+    viewerFired: viewerFired,
     sunkShips: sunkShips,
   ),
   lastShot: feedback,
@@ -479,6 +484,35 @@ void main() {
     expect(controller.shots, <(int, int)>[(4, 4)]);
   });
 
+  testWidgets('before the first shot the map explains the double-tap', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session(viewerFired: false))),
+    );
+
+    expect(
+      find.text('Double-tap a cell to fire at every opponent.'),
+      findsOneWidget,
+    );
+    expect(find.text('Your turn'), findsOneWidget);
+  });
+
+  testWidgets('after the first shot the double-tap hint is gone', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(_FakeSessionController(session: _session(viewerFired: true))),
+    );
+
+    expect(
+      find.text('Double-tap a cell to fire at every opponent.'),
+      findsNothing,
+    );
+    // The turn strip still says it is the viewer's turn.
+    expect(find.text('Your turn'), findsOneWidget);
+  });
+
   testWidgets('a player who is not active cannot fire', (
     WidgetTester tester,
   ) async {
@@ -688,6 +722,9 @@ void main() {
       find.text('You are watching the rest of the match. You cannot fire.'),
       findsOneWidget,
     );
+    // The sunk notice asks the player what to do next.
+    expect(find.text('Keep watching'), findsOneWidget);
+    expect(find.text('Leave match'), findsOneWidget);
     expect(find.text('Bob is shooting'), findsOneWidget);
     expect(find.text('Turn 3 · 22s left'), findsOneWidget);
     expect(
@@ -696,6 +733,39 @@ void main() {
     );
     expect(find.text('Wait for your turn'), findsNothing);
     expect(controller.shots, isEmpty);
+  });
+
+  testWidgets('keeping an eye on the match drops the sunk notice', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(myTurn: false, eliminated: true),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('Keep watching'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your fleet was sunk.'), findsNothing);
+    expect(find.text('Keep watching'), findsNothing);
+    // The spectator view stays, with a compact reminder of the state.
+    expect(find.byType(SpectatorView), findsOneWidget);
+    expect(find.text('Spectating'), findsOneWidget);
+    expect(find.byType(BattleBoard), findsNothing);
+  });
+
+  testWidgets('leaving from the sunk notice asks for confirmation', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(myTurn: false, eliminated: true),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('Leave match'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Leave the match?'), findsOneWidget);
   });
 
   testWidgets('the spectator status strip warns when the turn runs out', (
@@ -812,7 +882,7 @@ void main() {
     expect(find.byType(BoardCanvas), findsOneWidget);
   });
 
-  testWidgets('the final result opens the result screen', (
+  testWidgets('the final result opens the fleet review first', (
     WidgetTester tester,
   ) async {
     final _FakeSessionController controller = _FakeSessionController(
@@ -840,6 +910,11 @@ void main() {
                     const MatchScreen(),
               ),
               GoRoute(
+                path: '/match/result/fleets',
+                builder: (BuildContext context, GoRouterState state) =>
+                    const Scaffold(body: Center(child: Text('Fleet review'))),
+              ),
+              GoRoute(
                 path: '/match/result',
                 builder: (BuildContext context, GoRouterState state) =>
                     const Scaffold(body: Center(child: Text('Result screen'))),
@@ -863,7 +938,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Result screen'), findsOneWidget);
+    // The fleets are shown first; the result screen waits behind them.
+    expect(find.text('Fleet review'), findsOneWidget);
+    expect(find.text('Result screen'), findsNothing);
     expect(find.text('Your turn'), findsNothing);
   });
 }

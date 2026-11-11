@@ -212,6 +212,9 @@ The Host computes and broadcasts the final result:
 - Match duration.
 - Per-player statistics: shots, hits, misses, ships sunk, timeouts.
 - A locally generated match ID and the final state version.
+- The complete fleet of every player, revealed only because the match is
+  over. Once a winner is declared the result may show every hull and every
+  shot a fleet received, so the players can review how the match was won.
 
 Each device may save its own copy of the result to local history. There is no
 central match-history service. **Play Again** is a post-MVP enhancement; in the

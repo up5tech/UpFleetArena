@@ -62,6 +62,16 @@ class MatchResultScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
             _WinnerCard(result: result, viewerPlayerId: viewerPlayerId),
+            if (result.winnerPlayerId != null && result.fleets.isNotEmpty) ...<
+              Widget
+            >[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/match/result/fleets'),
+                icon: const Icon(Icons.directions_boat_outlined),
+                label: Text(l10n.reviewAllFleets),
+              ),
+            ],
             const SizedBox(height: 12),
             Text(
               own == null

@@ -21,6 +21,9 @@ class SpectatorView extends StatelessWidget {
     required this.snapshot,
     required this.session,
     this.footer,
+    this.showSunkNotice = true,
+    this.onKeepWatching,
+    this.onLeave,
   });
 
   final MatchSnapshot snapshot;
@@ -28,6 +31,18 @@ class SpectatorView extends StatelessWidget {
 
   /// Extra content appended below the feed, e.g. the player's own fleet.
   final Widget? footer;
+
+  /// Whether the sunk notice still asks the player what to do next.
+  ///
+  /// The notice is the first thing an eliminated player sees, so it stays
+  /// until they choose between watching the rest and leaving.
+  final bool showSunkNotice;
+
+  /// Called when the player chooses to keep watching the match.
+  final VoidCallback? onKeepWatching;
+
+  /// Called when the player chooses to leave the match.
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -46,54 +61,98 @@ class SpectatorView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.sunk.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.sunk.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.sunk.withValues(alpha: 0.14),
-                    ),
-                    child: const Icon(
-                      Icons.visibility_outlined,
-                      color: AppTheme.sunk,
-                      size: 18,
-                    ),
+            if (showSunkNotice)
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.sunk.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppTheme.sunk.withValues(alpha: 0.6),
+                    width: 1.5,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          l10n.yourFleetWasSunk,
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.sunk.withValues(alpha: 0.14),
+                          ),
+                          child: const Icon(
+                            Icons.visibility_outlined,
+                            color: AppTheme.sunk,
+                            size: 18,
+                          ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          l10n.spectatorWatching,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                            height: 1.35,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                l10n.yourFleetWasSunk,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                l10n.spectatorWatching,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                      height: 1.35,
+                                    ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
+                    // The notice waits for an answer, so an eliminated player
+                    // never wonders why the board ignores their taps.
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: <Widget>[
+                        TextButton(
+                          onPressed: onLeave,
+                          child: Text(l10n.closeMatch),
+                        ),
+                        FilledButton(
+                          onPressed: onKeepWatching,
+                          child: Text(l10n.keepWatching),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              )
+            else
+              // A compact reminder once the player decided to keep watching.
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.visibility_outlined,
+                    size: 14,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l10n.spectating,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
             if (snapshot.winnerPlayerId == null) ...<Widget>[
               const SizedBox(height: 12),
               // The same strip the players read, with the spectator's own

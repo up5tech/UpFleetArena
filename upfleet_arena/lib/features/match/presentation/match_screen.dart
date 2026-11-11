@@ -52,6 +52,9 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
     });
   }
 
+  /// Whether the eliminated player already answered the sunk notice.
+  bool _sunkNoticeSeen = false;
+
   @override
   void dispose() {
     _ticker?.cancel();
@@ -96,7 +99,11 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
       if (previous?.matchSnapshot?.turnNumber !=
               next.matchSnapshot?.turnNumber ||
           previous?.matchSnapshot?.matchId != next.matchSnapshot?.matchId) {
-        setState(() => _selectedCell = null);
+        setState(() {
+          _selectedCell = null;
+          // A new match starts with a fresh sunk notice.
+          _sunkNoticeSeen = false;
+        });
       }
 
       final MatchFeedback feedback = ref.read(matchFeedbackProvider);
@@ -139,7 +146,14 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
       session: session,
     );
     final Widget mainView = spectating
-        ? SpectatorView(snapshot: snapshot, session: session, footer: ownFleet)
+        ? SpectatorView(
+            snapshot: snapshot,
+            session: session,
+            footer: ownFleet,
+            showSunkNotice: !_sunkNoticeSeen,
+            onKeepWatching: () => setState(() => _sunkNoticeSeen = true),
+            onLeave: () => unawaited(_exit(session)),
+          )
         : _BattleTab(
             snapshot: snapshot,
             session: session,
@@ -189,10 +203,13 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
     ref.read(matchFeedbackProvider).turnEnding();
   }
 
-  /// Opens the result screen once the Host broadcast the final result.
+  /// Opens the fleet review once the Host broadcast the final result.
+  ///
+  /// The fleets always come first: the result screen is reached only after
+  /// the players acknowledge what was hit and sunk.
   void _followPhase(RoomSessionState session) {
     if (!mounted) return;
-    if (session.matchResult != null) context.go('/match/result');
+    if (session.matchResult != null) context.go('/match/result/fleets');
   }
 
   Future<void> _exit(RoomSessionState session) async {
@@ -295,6 +312,12 @@ class _BattleTab extends StatelessWidget {
         .toList();
 
     final bool finished = snapshot.winnerPlayerId != null;
+    // The hint teaches the double-tap, so it is a first-time note: it stays
+    // until the viewer's first shot of the match and never comes back. The
+    // turn strip already carries the timing after that.
+    final bool viewerFired = snapshot.mapShots.any(
+      (ShotView shot) => shot.attackerPlayerId == viewerId,
+    );
 
     // Whose turn it is, with the clock: a single strip above the map, so
     // nothing floats over the board or hides the player list.
@@ -385,7 +408,9 @@ class _BattleTab extends StatelessWidget {
               ],
             ),
           ),
-          if (!finished && (session.firePending || isMyTurn)) ...<Widget>[
+          if (!finished &&
+              (session.firePending ||
+                  (isMyTurn && !viewerFired))) ...<Widget>[
             const SizedBox(height: 8),
             Row(
               children: <Widget>[

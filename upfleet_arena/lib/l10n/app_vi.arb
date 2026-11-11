@@ -246,9 +246,23 @@
   "nobodySurvived": "Không ai sống sót sau trận.",
   "playerWonMatch": "{name} đã thắng trận.",
   "rankingStats": "{shots} phát bắn · {hits} trúng · {misses} trượt · {sunk} chìm · {timeouts} lần hết giờ",
+  "reviewAllFleets": "Xem lại toàn bộ hạm đội",
+  "allFleets": "Toàn bộ hạm đội",
+  "allFleetsHint": "Trận đấu đã kết thúc nên toàn bộ hạm đội được mở. Mỗi bàn cho thấy vị trí các con tàu và mọi phát bắn vào chúng.",
+  "fleetReviewSummary": "{ships} tàu · {sunk} chìm",
+  "@fleetReviewSummary": {
+    "placeholders": {
+      "ships": { "type": "int" },
+      "sunk": { "type": "int" }
+    }
+  },
+  "fleetsUnavailable": "Không có hạm đội nào được ghi lại.",
+  "shootersLegend": "Màu phát bắn",
+  "ok": "OK",
 
   "yourFleetWasSunk": "Hạm đội của bạn đã bị chìm.",
   "spectatorWatching": "Bạn đang xem phần còn lại của trận. Bạn không thể bắn.",
+  "keepWatching": "Xem tiếp trận",
   "stillInTheMatch": "Còn trong trận",
   "nobodyIsLeft": "Không còn ai.",
   "publicActivity": "Hoạt động công khai",

@@ -591,6 +591,47 @@ class PlayerResultView {
       );
 }
 
+/// The complete fleet of one player, revealed once the match is over.
+///
+/// While the match runs a fleet only ever reaches its owner (GAME_RULES.md §2).
+/// The result is the final broadcast, so after the last shot every hull may be
+/// shown for review — the review screen shows what the shared map could not.
+class FinalFleetView {
+  const FinalFleetView({
+    required this.playerId,
+    this.ships = const <ShipView>[],
+    this.receivedShots = const <ShotView>[],
+  });
+
+  /// The player whose fleet this is.
+  final String playerId;
+
+  /// Every ship of the fleet, with its hits and its sunk flag.
+  final List<ShipView> ships;
+
+  /// The shots that were fired at this fleet, by every player.
+  final List<ShotView> receivedShots;
+
+  /// How many ships of the fleet were sunk.
+  int get sunkCount => ships.where((ShipView ship) => ship.sunk).length;
+
+  /// Serializes the fleet.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'playerId': playerId,
+    'ships': ships.map((ShipView ship) => ship.toJson()).toList(),
+    'receivedShots': receivedShots
+        .map((ShotView shot) => shot.toJson())
+        .toList(),
+  };
+
+  /// Parses a fleet received from the Host.
+  factory FinalFleetView.fromJson(Map<String, dynamic> json) => FinalFleetView(
+    playerId: json['playerId'] as String? ?? '',
+    ships: _readViews(json['ships']),
+    receivedShots: _readShots(json['receivedShots']),
+  );
+}
+
 /// The final result of a finished match, built and broadcast by the Host.
 ///
 /// Every client receives the same result: the ranking and the statistics are
@@ -603,6 +644,7 @@ class MatchResult {
     required this.winnerDisplayName,
     required this.durationSeconds,
     required this.ranking,
+    this.fleets = const <FinalFleetView>[],
   });
 
   /// The identifier of the match.
@@ -623,10 +665,21 @@ class MatchResult {
   /// Every player, ordered from the winner down.
   final List<PlayerResultView> ranking;
 
+  /// The fleet of every player, revealed because the match is over.
+  final List<FinalFleetView> fleets;
+
   /// The standing of a player, or `null` when the player is unknown.
   PlayerResultView? standingOf(String playerId) {
     for (final PlayerResultView entry in ranking) {
       if (entry.playerId == playerId) return entry;
+    }
+    return null;
+  }
+
+  /// The revealed fleet of a player, or `null` when it is unknown.
+  FinalFleetView? fleetOf(String playerId) {
+    for (final FinalFleetView fleet in fleets) {
+      if (fleet.playerId == playerId) return fleet;
     }
     return null;
   }
@@ -639,6 +692,7 @@ class MatchResult {
     'winnerDisplayName': winnerDisplayName,
     'durationSeconds': durationSeconds,
     'ranking': ranking.map((PlayerResultView entry) => entry.toJson()).toList(),
+    'fleets': fleets.map((FinalFleetView fleet) => fleet.toJson()).toList(),
   };
 
   /// Parses a result received from the Host.
@@ -656,6 +710,7 @@ class MatchResult {
                 .map(PlayerResultView.fromJson)
                 .toList()
           : const <PlayerResultView>[],
+      fleets: _readFleets(json['fleets']),
     );
   }
 }
@@ -737,6 +792,14 @@ List<SunkShipView> _readSunkShips(Object? raw) {
   return raw
       .whereType<Map<String, dynamic>>()
       .map(SunkShipView.fromJson)
+      .toList();
+}
+
+List<FinalFleetView> _readFleets(Object? raw) {
+  if (raw is! List) return const <FinalFleetView>[];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map(FinalFleetView.fromJson)
       .toList();
 }
 

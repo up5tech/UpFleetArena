@@ -1789,6 +1789,27 @@ class RoomCoordinator {
   /// clients receive an identical result (PLAN.md §2.10).
   MatchResult _buildResult(HostRoomState room, String? winnerPlayerId) {
     final HostMatchState match = room.match!;
+    final List<PlayerResultView> ranking =
+        buildRanking(
+          turnOrder: match.turnOrder,
+          eliminationOrder: match.eliminationOrder,
+          winnerPlayerId: winnerPlayerId,
+        ).map((PlayerStanding standing) {
+          final PlayerMatchStats stats =
+              match.stats[standing.playerId] ?? PlayerMatchStats();
+          return PlayerResultView(
+            playerId: standing.playerId,
+            displayName:
+                room.players[standing.playerId]?.displayName ?? 'Player',
+            rank: standing.rank,
+            shots: stats.shots,
+            hits: stats.hits,
+            misses: stats.misses,
+            shipsSunk: stats.shipsSunk,
+            timeouts: match.timeouts[standing.playerId] ?? 0,
+          );
+        }).toList();
+
     return MatchResult(
       matchId: match.matchId,
       stateVersion: room.stateVersion,
@@ -1797,26 +1818,30 @@ class RoomCoordinator {
           ? null
           : room.players[winnerPlayerId]?.displayName,
       durationSeconds: match.finishedAt!.difference(match.startedAt).inSeconds,
-      ranking:
-          buildRanking(
-            turnOrder: match.turnOrder,
-            eliminationOrder: match.eliminationOrder,
-            winnerPlayerId: winnerPlayerId,
-          ).map((PlayerStanding standing) {
-            final PlayerMatchStats stats =
-                match.stats[standing.playerId] ?? PlayerMatchStats();
-            return PlayerResultView(
-              playerId: standing.playerId,
-              displayName:
-                  room.players[standing.playerId]?.displayName ?? 'Player',
-              rank: standing.rank,
-              shots: stats.shots,
-              hits: stats.hits,
-              misses: stats.misses,
-              shipsSunk: stats.shipsSunk,
-              timeouts: match.timeouts[standing.playerId] ?? 0,
-            );
-          }).toList(),
+      ranking: ranking,
+      // The match is over, so every fleet may be reviewed. A fleet that is
+      // still afloat never left the Host before this final broadcast.
+      fleets: <FinalFleetView>[
+        for (final PlayerResultView entry in ranking)
+          if (match.boards[entry.playerId] case final PlayerBoard board)
+            FinalFleetView(
+              playerId: entry.playerId,
+              ships: board.ships.values
+                  .map(
+                    (ShipState ship) => ShipView(
+                      shipId: ship.shipId,
+                      length: ship.length,
+                      orientation: ship.placement.orientation,
+                      row: ship.placement.row,
+                      column: ship.placement.column,
+                      hitCells: ship.hitCells.toList(),
+                      sunk: ship.isSunk,
+                    ),
+                  )
+                  .toList(),
+              receivedShots: _shotsAgainst(room, entry.playerId),
+            ),
+      ],
     );
   }
 

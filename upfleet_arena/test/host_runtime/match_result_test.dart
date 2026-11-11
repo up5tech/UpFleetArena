@@ -239,6 +239,32 @@ void main() {
       expect(loser.misses, 7);
       expect(loser.shipsSunk, 0);
       expect(loser.shots, loser.hits + loser.misses);
+
+      // The match is over, so the result reveals every fleet for review.
+      expect(
+        result.fleets.map((FinalFleetView fleet) => fleet.playerId).toList(),
+        <String>[f.host, 'alice'],
+      );
+      final FinalFleetView winnerFleet = result.fleetOf(f.host)!;
+      expect(winnerFleet.ships, hasLength(3));
+      expect(winnerFleet.sunkCount, 0);
+      // Alice fired seven shots into open water, so the winner's fleet took
+      // seven shots and none of them found a ship.
+      expect(winnerFleet.receivedShots, hasLength(7));
+      expect(
+        winnerFleet.receivedShots.every(
+          (ShotView shot) => shot.result == ShotResult.miss,
+        ),
+        isTrue,
+      );
+      final FinalFleetView loserFleet = result.fleetOf('alice')!;
+      expect(loserFleet.ships, hasLength(3));
+      expect(loserFleet.sunkCount, 3);
+      expect(loserFleet.receivedShots, hasLength(7));
+      expect(
+        loserFleet.ships.expand((ShipView ship) => ship.hitCells).length,
+        7,
+      );
     },
   );
 
