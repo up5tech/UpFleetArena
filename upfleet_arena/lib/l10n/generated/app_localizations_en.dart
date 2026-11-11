@@ -108,6 +108,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String shipSize(int width, int height) {
+    return '$width×$height';
+  }
+
+  @override
   String shipsLeftCount(int count) {
     return '$count ships left';
   }

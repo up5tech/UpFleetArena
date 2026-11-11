@@ -373,6 +373,7 @@ class _BattleTab extends StatelessWidget {
                             ShipPlacement(
                               shipId: ship.shipId,
                               length: ship.length,
+                              span: ship.span,
                               orientation: ship.orientation,
                               row: ship.row,
                               column: ship.column,
@@ -692,6 +693,7 @@ class _OwnFleetSection extends StatelessWidget {
                                       (ShipView ship) => ShipPlacement(
                                         shipId: ship.shipId,
                                         length: ship.length,
+                                        span: ship.span,
                                         orientation: ship.orientation,
                                         row: ship.row,
                                         column: ship.column,

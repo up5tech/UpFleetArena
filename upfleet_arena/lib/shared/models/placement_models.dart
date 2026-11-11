@@ -11,13 +11,18 @@ class ShipLayout {
     required this.orientation,
     required this.row,
     required this.column,
+    this.span = 1,
   });
 
   /// The stable identifier of the ship inside its fleet.
   final String shipId;
 
-  /// The length of the ship in cells.
+  /// The length of the ship in cells, along its direction.
   final int length;
+
+  /// The cells the ship covers across its direction: `1` for a line, the
+  /// length itself for a square ship such as 2×2 or 3×3.
+  final int span;
 
   /// The direction the ship points to.
   final ShipOrientation orientation;
@@ -32,6 +37,7 @@ class ShipLayout {
   factory ShipLayout.fromPlacement(ShipPlacement placement) => ShipLayout(
     shipId: placement.shipId,
     length: placement.length,
+    span: placement.span,
     orientation: placement.orientation,
     row: placement.row,
     column: placement.column,
@@ -41,6 +47,7 @@ class ShipLayout {
   ShipPlacement toPlacement() => ShipPlacement(
     shipId: shipId,
     length: length,
+    span: span,
     orientation: orientation,
     row: row,
     column: column,
@@ -50,6 +57,7 @@ class ShipLayout {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'shipId': shipId,
     'length': length,
+    'span': span,
     'orientation': orientation.wire,
     'row': row,
     'column': column,
@@ -59,6 +67,7 @@ class ShipLayout {
   factory ShipLayout.fromJson(Map<String, dynamic> json) => ShipLayout(
     shipId: json['shipId'] as String? ?? '',
     length: json['length'] as int? ?? 0,
+    span: json['span'] as int? ?? 1,
     orientation: ShipOrientation.fromWire(json['orientation'] as String?),
     row: json['row'] as int? ?? -1,
     column: json['column'] as int? ?? -1,

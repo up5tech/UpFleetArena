@@ -88,7 +88,7 @@ rectangular boards even if the first UI only offers square presets.
 ## 4. Fleet configuration
 
 The Host picks a fleet preset. A raw ship count is not enough, because
-placement validation and sinking depend on each ship's length.
+placement validation and sinking depend on the size of each ship.
 
 | Preset | Ship lengths | Ship count |
 |---|---|---:|
@@ -103,6 +103,15 @@ Rules:
 - Ships **may** touch each other in the MVP; edge and diagonal adjacency are
   allowed.
 - Every ship must be fully inside the board.
+- A ship is not always a line: it covers `length` cells along its direction
+  and `span` cells across it. A span of `1` is a classic ship; a span equal to
+  the length is a square block such as 2×2 or 3×3.
+- Only a ship whose cells form a square can be drawn as a block: 4 cells
+  (2×2), 9 cells (3×3), 16 cells (4×4) and so on. A preset only states how many
+  cells each ship covers, so the four-cell ship of the Standard and Large
+  fleets may be placed as a line or as a 2×2 block, while a three- or five-cell
+  ship always stays a line. A block covers the same cells as its line and
+  sinks only when all of them are hit; rotating it changes nothing.
 - The fleet profile must pass a fit check against the selected board size.
 - Custom fleet editing comes after the preset-based MVP is stable.
 

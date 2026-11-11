@@ -146,13 +146,20 @@ class ShipView {
     required this.column,
     required this.hitCells,
     required this.sunk,
+    this.span = 1,
   });
 
   /// The identifier of the ship.
   final String shipId;
 
-  /// The length of the ship in cells.
+  /// The length of the ship in cells, along its direction.
   final int length;
+
+  /// The cells the ship covers across its direction.
+  ///
+  /// `1` for a line; a square ship such as 2×2 or 3×3 has a span equal to its
+  /// length. Older Hosts never send it, so it falls back to one cell.
+  final int span;
 
   /// The direction the ship points to.
   final ShipOrientation orientation;
@@ -173,6 +180,7 @@ class ShipView {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'shipId': shipId,
     'length': length,
+    'span': span,
     'orientation': orientation.wire,
     'row': row,
     'column': column,
@@ -191,6 +199,7 @@ class ShipView {
   factory ShipView.fromJson(Map<String, dynamic> json) => ShipView(
     shipId: json['shipId'] as String? ?? '',
     length: json['length'] as int? ?? 0,
+    span: json['span'] as int? ?? 1,
     orientation: ShipOrientation.fromWire(json['orientation'] as String?),
     row: json['row'] as int? ?? 0,
     column: json['column'] as int? ?? 0,
@@ -213,6 +222,7 @@ class SunkShipView {
     required this.orientation,
     required this.row,
     required this.column,
+    this.span = 1,
   });
 
   /// The player whose fleet lost the ship.
@@ -221,8 +231,11 @@ class SunkShipView {
   /// The identifier of the ship inside its fleet.
   final String shipId;
 
-  /// The length of the ship in cells.
+  /// The length of the ship in cells, along its direction.
   final int length;
+
+  /// The cells the ship covered across its direction.
+  final int span;
 
   /// The direction the ship points to.
   final ShipOrientation orientation;
@@ -237,6 +250,7 @@ class SunkShipView {
   ShipPlacement get placement => ShipPlacement(
     shipId: shipId,
     length: length,
+    span: span,
     orientation: orientation,
     row: row,
     column: column,
@@ -247,6 +261,7 @@ class SunkShipView {
     'ownerPlayerId': ownerPlayerId,
     'shipId': shipId,
     'length': length,
+    'span': span,
     'orientation': orientation.wire,
     'row': row,
     'column': column,
@@ -257,6 +272,7 @@ class SunkShipView {
     ownerPlayerId: json['ownerPlayerId'] as String? ?? '',
     shipId: json['shipId'] as String? ?? '',
     length: json['length'] as int? ?? 0,
+    span: json['span'] as int? ?? 1,
     orientation: ShipOrientation.fromWire(json['orientation'] as String?),
     row: json['row'] as int? ?? 0,
     column: json['column'] as int? ?? 0,

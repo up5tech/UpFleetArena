@@ -34,6 +34,14 @@
   "show": "Show",
 
   "cellsCount": "{count} cells",
+  "shipSize": "{width}×{height}",
+  "squareShape": "Square",
+  "@shipSize": {
+    "placeholders": {
+      "width": { "type": "int" },
+      "height": { "type": "int" }
+    }
+  },
   "@cellsCount": {
     "placeholders": {
       "count": { "type": "int" }

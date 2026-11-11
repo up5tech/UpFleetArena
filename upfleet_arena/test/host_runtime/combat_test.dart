@@ -61,10 +61,12 @@ class RecordingTransport implements RoomTransport {
 /// Every player of the fixture owns a band of five columns, so a shot can hit
 /// one fleet without touching the others while the map stays shared.
 List<ShipPlacement> fleetAt(int columnOffset) => [
-  for (final (int index, int length) in [4, 3, 3, 2, 2].indexed)
+  for (final (int index, int length) in FleetPreset.standard.shipLengths.indexed)
     ShipPlacement(
       shipId: 'ship-${index + 1}',
       length: length,
+      // The Standard fleet seats its fourth ship as a 2×2 block.
+      span: FleetPreset.standard.spanAt(index),
       orientation: ShipOrientation.horizontal,
       row: index * 2,
       column: columnOffset,
@@ -272,6 +274,7 @@ Map<String, dynamic> _ownBoardJson(
       {
         'shipId': ship.shipId,
         'length': ship.length,
+        'span': ship.span,
         'orientation': 'horizontal',
         'row': ship.row,
         'column': ship.column,
@@ -403,7 +406,8 @@ void main() {
         'hit',
       );
       expect(f.match.boards['bob']!.sunkCount, 1);
-      expect(f.match.boards['bob']!.remainingCells, 12);
+      // Sixteen cells, two of them the sunk ship took.
+      expect(f.match.boards['bob']!.remainingCells, 14);
     },
   );
 
@@ -867,8 +871,9 @@ void main() {
         await f.shoot(f.host, row: cell.row, column: cell.column);
         expect(f.room.stateVersion, version + 1);
         if (i + 1 < cells.length) {
-          // Alice fires into open water so only her fleet takes damage.
-          await f.shoot('alice', row: 9, column: i);
+          // Alice fires into open water so only her fleet takes damage, and
+          // never at the same cell twice.
+          await f.shoot('alice', row: i.isEven ? 9 : 5, column: i ~/ 2);
         }
       }
       expect(f.room.status, RoomStatus.finished);

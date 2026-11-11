@@ -6,7 +6,7 @@ import 'placement.dart';
 
 /// Places the whole fleet on the board without any overlap.
 ///
-/// The ships are placed longest first and every ship takes a random free
+/// The ships are placed largest first and every ship takes a random free
 /// spot, so the result is a legal layout that also looks hand-made. The
 /// caller owns the random source, which keeps the algorithm testable
 /// (PLAN.md §9.1).
@@ -20,7 +20,7 @@ List<ShipPlacement> autoPlaceFleet({
     shipIds.length,
     (int index) => index,
   )..sort(
-    (int a, int b) => profile.shipLengths[b].compareTo(profile.shipLengths[a]),
+    (int a, int b) => _cellsOf(profile, b).compareTo(_cellsOf(profile, a)),
   );
 
   final Map<String, ShipPlacement> placed = <String, ShipPlacement>{};
@@ -28,11 +28,13 @@ List<ShipPlacement> autoPlaceFleet({
   for (final int index in order) {
     final String shipId = shipIds[index];
     final int length = profile.shipLengths[index];
+    final int span = profile.spanAt(index);
 
     final List<ShipPlacement> candidates = _candidates(
       board: board,
       shipId: shipId,
       length: length,
+      span: span,
     )..shuffle(random);
 
     ShipPlacement? chosen;
@@ -63,20 +65,31 @@ List<ShipPlacement> autoPlaceFleet({
       .toList();
 }
 
+/// The number of cells the ship at [index] covers.
+int _cellsOf(FleetProfile profile, int index) =>
+    profile.shipLengths[index] * profile.spanAt(index);
+
 /// Every position the ship would fit on.
 List<ShipPlacement> _candidates({
   required BoardSize board,
   required String shipId,
   required int length,
+  required int span,
 }) {
   final List<ShipPlacement> candidates = <ShipPlacement>[];
+  // A square ship covers the same cells in both directions, so one pass is
+  // enough and the layout keeps no duplicates.
+  final List<ShipOrientation> orientations = span == length
+      ? <ShipOrientation>[ShipOrientation.horizontal]
+      : ShipOrientation.values;
 
   for (int row = 0; row < board.rows; row++) {
     for (int column = 0; column < board.columns; column++) {
-      for (final ShipOrientation orientation in ShipOrientation.values) {
+      for (final ShipOrientation orientation in orientations) {
         final ShipPlacement candidate = ShipPlacement(
           shipId: shipId,
           length: length,
+          span: span,
           orientation: orientation,
           row: row,
           column: column,

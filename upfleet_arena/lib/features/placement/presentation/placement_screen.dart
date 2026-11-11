@@ -39,6 +39,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   String? _hint;
   final Map<String, ShipOrientation> _pendingOrientation =
       <String, ShipOrientation>{};
+
+  /// Whether the player picked the square shape for a ship not placed yet.
+  final Map<String, bool> _pendingSquare = <String, bool>{};
   final List<List<ShipPlacement>> _undoStack = <List<ShipPlacement>>[];
   Timer? _ticker;
 
@@ -111,15 +114,42 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     return _pendingOrientation[shipId] ?? ShipOrientation.horizontal;
   }
 
+  /// Whether the ship is, or is about to be, a square block.
+  bool _isSquare(String shipId) {
+    final ShipPlacement? placed = _placedShip(shipId);
+    if (placed != null) return placed.isSquare;
+    return _pendingSquare[shipId] ?? false;
+  }
+
+  /// The footprint the ship has, or is about to get, on the board.
+  int? _lengthOf(String shipId) {
+    final ShipPlacement? placed = _placedShip(shipId);
+    if (placed != null) return placed.length;
+    final int? side = _profile.squareSideOf(shipId);
+    if (side != null && _isSquare(shipId)) return side;
+    return _profile.lengthOf(shipId);
+  }
+
+  /// The cells the ship covers across its direction.
+  int? _spanOf(String shipId) {
+    final ShipPlacement? placed = _placedShip(shipId);
+    if (placed != null) return placed.span;
+    final int? side = _profile.squareSideOf(shipId);
+    if (side != null && _isSquare(shipId)) return side;
+    return _profile.spanOf(shipId);
+  }
+
   ShipPlacement? get _preview {
     final String? shipId = _selectedShipId;
     final CellCoord? cell = _previewCell;
     if (shipId == null || cell == null) return null;
-    final int? length = _profile.lengthOf(shipId);
-    if (length == null) return null;
+    final int? length = _lengthOf(shipId);
+    final int? span = _spanOf(shipId);
+    if (length == null || span == null) return null;
     return ShipPlacement(
       shipId: shipId,
       length: length,
+      span: span,
       orientation: _orientationOf(shipId),
       row: cell.row,
       column: cell.column,
@@ -199,6 +229,8 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
               selectedShipId: _selectedShipId,
               enabled: !locked,
               onSelect: _selectShip,
+              lengthOf: _lengthOf,
+              spanOf: _spanOf,
             ),
             const SizedBox(height: 12),
             // A Wrap keeps every label on one line: with fixed thirds the
@@ -213,6 +245,17 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
                   onPressed: _selectedShipId == null || locked ? null : _rotate,
                   icon: const Icon(Icons.rotate_right, size: 18),
                   label: Text(l10n.rotate),
+                ),
+                OutlinedButton.icon(
+                  style: _actionButtonStyle,
+                  onPressed:
+                      _selectedShipId == null ||
+                          locked ||
+                          _profile.squareSideOf(_selectedShipId!) == null
+                      ? null
+                      : _toggleSquare,
+                  icon: const Icon(Icons.crop_square, size: 18),
+                  label: Text(l10n.squareShape),
                 ),
                 OutlinedButton.icon(
                   style: _actionButtonStyle,
@@ -284,12 +327,14 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final String? shipId = _selectedShipId;
     if (shipId == null) return;
 
-    final int? length = _profile.lengthOf(shipId);
-    if (length == null) return;
+    final int? length = _lengthOf(shipId);
+    final int? span = _spanOf(shipId);
+    if (length == null || span == null) return;
 
     final ShipPlacement candidate = ShipPlacement(
       shipId: shipId,
       length: length,
+      span: span,
       orientation: _orientationOf(shipId),
       row: cell.row,
       column: cell.column,
@@ -330,6 +375,8 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   void _rotate() {
     final String? shipId = _selectedShipId;
     if (shipId == null) return;
+    // A square block covers the same cells in both directions.
+    if (_isSquare(shipId)) return;
 
     final ShipPlacement? placed = _placedShip(shipId);
     if (placed == null) {
@@ -344,6 +391,59 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final List<ShipPlacement> next =
         _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
           ..add(rotated);
+
+    final PlacementError? error = validateFleetLayout(
+      board: _board,
+      profile: _profile,
+      ships: next,
+    );
+    if (error != null) {
+      setState(() => _hint = error.message);
+      return;
+    }
+
+    _pushUndo();
+    setState(() {
+      _hint = null;
+      _previewCell = null;
+    });
+    ref.read(roomSessionControllerProvider.notifier).setPlacement(next);
+  }
+
+  /// Switches the selected ship between a line and a square block.
+  ///
+  /// Only a ship whose cells can form a square is offered the block shape.
+  void _toggleSquare() {
+    final String? shipId = _selectedShipId;
+    if (shipId == null) return;
+    final int? side = _profile.squareSideOf(shipId);
+    if (side == null) return;
+    final bool toSquare = !_isSquare(shipId);
+
+    final ShipPlacement? placed = _placedShip(shipId);
+    if (placed == null) {
+      setState(() {
+        _pendingSquare[shipId] = toSquare;
+        _hint = null;
+        _previewCell = null;
+      });
+      return;
+    }
+
+    final ShipPlacement candidate = toSquare
+        ? placed.copyWith(
+            length: side,
+            span: side,
+            orientation: ShipOrientation.horizontal,
+          )
+        : placed.copyWith(
+            length: _profile.lengthOf(shipId) ?? placed.length,
+            span: _profile.spanOf(shipId) ?? 1,
+          );
+
+    final List<ShipPlacement> next =
+        _ships.where((ShipPlacement ship) => ship.shipId != shipId).toList()
+          ..add(candidate);
 
     final PlacementError? error = validateFleetLayout(
       board: _board,
@@ -450,6 +550,8 @@ class _ShipInventory extends StatelessWidget {
     required this.selectedShipId,
     required this.enabled,
     required this.onSelect,
+    required this.lengthOf,
+    required this.spanOf,
   });
 
   final FleetProfile profile;
@@ -457,6 +559,10 @@ class _ShipInventory extends StatelessWidget {
   final String? selectedShipId;
   final bool enabled;
   final ValueChanged<String> onSelect;
+
+  /// The footprint each ship has on the board right now.
+  final int? Function(String shipId) lengthOf;
+  final int? Function(String shipId) spanOf;
 
   @override
   Widget build(BuildContext context) {
@@ -471,7 +577,8 @@ class _ShipInventory extends StatelessWidget {
         for (final String shipId in profile.shipIds)
           _ShipChip(
             shipId: shipId,
-            length: profile.lengthOf(shipId) ?? 0,
+            length: lengthOf(shipId) ?? 0,
+            span: spanOf(shipId) ?? 1,
             placed: placed.contains(shipId),
             selected: selectedShipId == shipId,
             onTap: enabled ? () => onSelect(shipId) : null,
@@ -485,6 +592,7 @@ class _ShipChip extends StatelessWidget {
   const _ShipChip({
     required this.shipId,
     required this.length,
+    required this.span,
     required this.placed,
     required this.selected,
     required this.onTap,
@@ -492,6 +600,9 @@ class _ShipChip extends StatelessWidget {
 
   final String shipId;
   final int length;
+
+  /// `1` for a line, the length itself for a square ship.
+  final int span;
   final bool placed;
   final bool selected;
   final VoidCallback? onTap;
@@ -521,7 +632,9 @@ class _ShipChip extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              AppLocalizations.of(context).cellsCount(length),
+              span == 1
+                  ? AppLocalizations.of(context).cellsCount(length)
+                  : AppLocalizations.of(context).shipSize(length, span),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
                 fontWeight: selected ? FontWeight.w600 : null,

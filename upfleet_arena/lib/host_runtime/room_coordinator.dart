@@ -1831,6 +1831,7 @@ class RoomCoordinator {
                     (ShipState ship) => ShipView(
                       shipId: ship.shipId,
                       length: ship.length,
+                      span: ship.placement.span,
                       orientation: ship.placement.orientation,
                       row: ship.placement.row,
                       column: ship.placement.column,
@@ -2068,6 +2069,7 @@ class RoomCoordinator {
             ownerPlayerId: playerId,
             shipId: ship.shipId,
             length: ship.length,
+            span: ship.placement.span,
             orientation: ship.placement.orientation,
             row: ship.placement.row,
             column: ship.placement.column,
@@ -2098,6 +2100,7 @@ class RoomCoordinator {
             (ShipState ship) => ShipView(
               shipId: ship.shipId,
               length: ship.length,
+              span: ship.placement.span,
               orientation: ship.placement.orientation,
               row: ship.placement.row,
               column: ship.placement.column,

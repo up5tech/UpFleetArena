@@ -16,6 +16,10 @@ enum PlacementProblem {
   /// The ship length does not match the fleet profile.
   wrongLength,
 
+  /// The ship span does not match the fleet profile: a square ship sent as a
+  /// line, or the other way round.
+  wrongShape,
+
   /// The fleet is not placed completely.
   incompleteFleet,
 }
@@ -46,6 +50,19 @@ List<String> validateFleetProfile(
   if (profile.shipLengths.any((int length) => length <= 0)) {
     problems.add('A ship must be at least one cell long.');
   }
+  if (profile.shipSpans.any((int span) => span <= 0)) {
+    problems.add('A ship must be at least one cell wide.');
+  }
+  final int longestSide = rows > columns ? rows : columns;
+  for (int index = 0; index < profile.shipLengths.length; index++) {
+    final int length = profile.shipLengths[index];
+    final int span = profile.spanAt(index);
+    if (length > longestSide || span > longestSide) {
+      problems.add(
+        'A $length×$span ship does not fit on a $rows×$columns board.',
+      );
+    }
+  }
   if (profile.totalCells > rows * columns) {
     problems.add(
       'The fleet occupies ${profile.totalCells} cells and does not fit on a '
@@ -72,10 +89,28 @@ PlacementError? validateShipPlacement({
       'That ship is not part of this fleet.',
     );
   }
-  if (candidate.length != expectedLength) {
+  final int expectedSpan = profile.spanOf(candidate.shipId) ?? 1;
+  final int expectedCells = expectedLength * expectedSpan;
+  // A ship whose cells form a square may be drawn as a block instead of a
+  // line: the cells stay the same, only the footprint changes.
+  final int? side = profile.squareSideOf(candidate.shipId);
+  final bool asLine =
+      candidate.length == expectedLength && candidate.span == expectedSpan;
+  final bool asBlock =
+      side != null && candidate.length == side && candidate.span == side;
+  if (!asLine && !asBlock) {
+    if (candidate.length * candidate.span != expectedCells) {
+      return PlacementError(
+        PlacementProblem.wrongLength,
+        'This ship covers $expectedCells cells.',
+      );
+    }
     return PlacementError(
-      PlacementProblem.wrongLength,
-      'This ship is $expectedLength cells long.',
+      PlacementProblem.wrongShape,
+      side == null
+          ? 'This ship is one cell wide.'
+          : 'This ship covers $expectedCells cells as a line or as a '
+                '$side×$side block.',
     );
   }
 

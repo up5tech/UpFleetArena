@@ -81,27 +81,43 @@ enum PlayerConnectionStatus {
 }
 
 /// The fleet presets offered by the Host (PLAN.md §2.4).
+///
+/// A preset states how many cells every ship covers. A ship whose cells can
+/// form a square may be placed as a line or as a block (GAME_RULES.md §4).
 enum FleetPreset {
-  /// `[3, 2, 2]`.
-  small(<int>[3, 2, 2]),
+  /// `[3, 2, 2]`: three lines.
+  small(<int>[3, 2, 2], <int>[1, 1, 1]),
 
-  /// `[4, 3, 3, 2, 2]`.
-  standard(<int>[4, 3, 3, 2, 2]),
+  /// `[4, 3, 3, 2, 2]`: the four-cell ship may also be a 2×2 block.
+  standard(<int>[4, 3, 3, 2, 2], <int>[1, 1, 1, 1, 1]),
 
-  /// `[5, 4, 3, 3, 2, 2]`.
-  large(<int>[5, 4, 3, 3, 2, 2]);
+  /// `[5, 4, 3, 3, 2, 2]`: the four-cell ship may also be a 2×2 block.
+  large(<int>[5, 4, 3, 3, 2, 2], <int>[1, 1, 1, 1, 1, 1]);
 
-  const FleetPreset(this.shipLengths);
+  const FleetPreset(this.shipLengths, this.shipSpans);
 
   /// Length of each ship in this preset.
   final List<int> shipLengths;
 
+  /// The cells each ship covers across its direction: `1` for a line, the
+  /// same as its length for a square block.
+  final List<int> shipSpans;
+
   /// Number of ships in this preset.
   int get shipCount => shipLengths.length;
 
+  /// The span of the ship at [index], defaulting to a one-cell line.
+  int spanAt(int index) =>
+      index < shipSpans.length && shipSpans[index] > 0 ? shipSpans[index] : 1;
+
   /// Total number of cells the fleet occupies.
-  int get totalCells =>
-      shipLengths.fold(0, (int sum, int length) => sum + length);
+  int get totalCells {
+    int sum = 0;
+    for (int index = 0; index < shipLengths.length; index++) {
+      sum += shipLengths[index] * spanAt(index);
+    }
+    return sum;
+  }
 
   /// Wire key, e.g. `STANDARD`.
   String get wire => name.toUpperCase();
@@ -113,8 +129,13 @@ enum FleetPreset {
     FleetPreset.large => 'Large',
   };
 
-  /// The ship lengths as a readable list, e.g. `4, 3, 3, 2, 2`.
-  String get shipSummary => shipLengths.join(', ');
+  /// The ship sizes as a readable list, e.g. `4, 3, 3, 2, 2`.
+  String get shipSummary => <String>[
+    for (int index = 0; index < shipLengths.length; index++)
+      spanAt(index) == 1
+          ? '${shipLengths[index]}'
+          : '${shipLengths[index]}×${spanAt(index)}',
+  ].join(', ');
 
   /// Parses a wire value, falling back to [FleetPreset.standard].
   static FleetPreset fromWire(String? value) {

@@ -34,6 +34,14 @@
   "show": "Hiện",
 
   "cellsCount": "{count} ô",
+  "shipSize": "{width}×{height}",
+  "squareShape": "Vuông",
+  "@shipSize": {
+    "placeholders": {
+      "width": { "type": "int" },
+      "height": { "type": "int" }
+    }
+  },
   "shipsLeftCount": "còn {count} tàu",
   "timeoutsCount": "{count} lần hết giờ",
   "playerNameYou": "{name} (bạn)",

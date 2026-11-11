@@ -290,6 +290,12 @@ abstract class AppLocalizations {
   /// **'{count} cells'**
   String cellsCount(int count);
 
+  /// No description provided for @shipSize.
+  ///
+  /// In en, this message translates to:
+  /// **'{width}×{height}'**
+  String shipSize(int width, int height);
+
   /// No description provided for @shipsLeftCount.
   ///
   /// In en, this message translates to:

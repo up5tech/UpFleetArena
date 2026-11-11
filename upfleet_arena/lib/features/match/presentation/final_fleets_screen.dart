@@ -273,6 +273,7 @@ class _FleetCard extends StatelessWidget {
                         ShipPlacement(
                           shipId: ship.shipId,
                           length: ship.length,
+                          span: ship.span,
                           orientation: ship.orientation,
                           row: ship.row,
                           column: ship.column,

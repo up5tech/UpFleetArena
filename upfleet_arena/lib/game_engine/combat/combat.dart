@@ -59,10 +59,12 @@ class ShipState {
   final Set<CellCoord> hitCells = <CellCoord>{};
 
   /// The cells the ship occupies.
+  ///
+  /// A square ship such as 2×2 or 3×3 covers more cells than its length.
   List<CellCoord> get cells => placement.cells;
 
   /// Whether every cell of the ship was hit.
-  bool get isSunk => hitCells.length >= length;
+  bool get isSunk => hitCells.length >= cells.length;
 
   /// The cells of the ship that are still free.
   List<CellCoord> get freeCells =>
@@ -149,7 +151,7 @@ ShotResolution resolveShot(PlayerBoard board, CellCoord cell) {
 
 /// Whether the ship was sunk by the given hits.
 bool isShipSunk(ShipState ship, Set<CellCoord> hitCells) =>
-    hitCells.length >= ship.length;
+    hitCells.length >= ship.cells.length;
 
 /// Whether the whole fleet of the player was sunk.
 bool isPlayerEliminated(PlayerBoard board) => board.isEliminated;

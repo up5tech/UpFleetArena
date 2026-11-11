@@ -429,6 +429,7 @@ the room left it.
       {
         "shipId": "ship-1",
         "length": 4,
+        "span": 1,
         "orientation": "horizontal",
         "row": 0,
         "column": 0
@@ -441,7 +442,8 @@ the room left it.
 | Field | Meaning |
 |---|---|
 | `shipId` | The identifier of the ship, e.g. `ship-1`. Derived from the fleet preset |
-| `length` | The length of the ship in cells. It must match the preset |
+| `length` | The cells of the ship along its direction: the preset length for a line, the square side for a block |
+| `span` | The cells the ship covers across its direction: `1` for a line, the side for a square block (2×2, 3×3). Optional on the wire, defaults to `1`. Only a ship whose preset cells form a square (4, 9, 16 …) may be sent as a block; `length × span` must stay equal to the preset cells |
 | `orientation` | `horizontal` or `vertical` |
 | `row`, `column` | The anchor cell of the ship: the leftmost cell of a horizontal ship, the topmost cell of a vertical one |
 
@@ -699,7 +701,8 @@ each accepted change:
       "ownBoard": {
         "ships": [
           {
-            "shipId": "ship-1", "length": 4, "orientation": "horizontal",
+            "shipId": "ship-1", "length": 4, "span": 1,
+            "orientation": "horizontal",
             "row": 0, "column": 0, "hitCells": [ { "row": 0, "column": 1 } ],
             "sunk": false
           }
@@ -712,7 +715,7 @@ each accepted change:
       "sunkShips": [
         {
           "ownerPlayerId": "other-uuid", "shipId": "ship-2", "length": 2,
-          "orientation": "vertical", "row": 4, "column": 6
+          "span": 1, "orientation": "vertical", "row": 4, "column": 6
         }
       ],
       "winnerPlayerId": null
