@@ -26,6 +26,9 @@ class LobbyScreen extends ConsumerStatefulWidget {
 }
 
 class _LobbyScreenState extends ConsumerState<LobbyScreen> {
+  /// A closed room is reported once, not on every rebuild of the lobby.
+  bool _closedRoomHandled = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +37,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   void _checkSession() {
     final RoomSessionState state = ref.read(roomSessionControllerProvider);
+    // _followPhase owns the closed case so the reason is not lost.
+    if (state.status == RoomSessionStatus.closed) return;
     if (!state.isInRoom && mounted) {
       context.go('/');
     }
@@ -202,6 +207,21 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   /// Follows the phase the Host moved the room into.
   void _followPhase(RoomSessionState session) {
     if (!mounted) return;
+    if (session.status == RoomSessionStatus.closed) {
+      if (_closedRoomHandled) return;
+      _closedRoomHandled = true;
+      final String? message = session.errorMessage;
+      if (message != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+      }
+      ref
+          .read(roomSessionControllerProvider.notifier)
+          .acknowledgeClosedRoom();
+      context.go('/');
+      return;
+    }
     final RoomStatus? status = session.snapshot?.status;
     if (status == RoomStatus.active) {
       context.go('/match');

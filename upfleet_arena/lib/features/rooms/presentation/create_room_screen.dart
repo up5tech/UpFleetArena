@@ -134,7 +134,9 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                 ),
               ),
             ),
-            if (session.errorMessage != null) ...<Widget>[
+            // A closed room is a terminal notice, not a create-room error.
+            if (session.errorMessage != null &&
+                session.status != RoomSessionStatus.closed) ...<Widget>[
               const SizedBox(height: 12),
               _ErrorCard(
                 message: session.errorMessage!,

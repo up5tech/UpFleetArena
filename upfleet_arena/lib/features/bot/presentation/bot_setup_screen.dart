@@ -171,7 +171,10 @@ class _BotSetupScreenState extends ConsumerState<BotSetupScreen> {
             ),
             const SizedBox(height: 12),
 
-            if (session.errorMessage != null) ...<Widget>[
+            // A closed room is a terminal notice, not a setup error: it is
+            // shown once on Home instead of following the player here.
+            if (session.errorMessage != null &&
+                session.status != RoomSessionStatus.closed) ...<Widget>[
               const SizedBox(height: 12),
               Text(
                 session.errorMessage!,

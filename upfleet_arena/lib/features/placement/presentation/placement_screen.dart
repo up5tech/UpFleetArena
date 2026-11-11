@@ -103,7 +103,9 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
   /// Follows the phase the Host moved the room into.
   ///
   /// Only one check is queued at a time: the old code queued one callback per
-  /// build, which piled up while the board was being dragged.
+  /// build, which piled up while the board was being dragged. A closed room
+  /// ends the preparation: the notice is shown once on Home and the stale
+  /// session is cleared, so it cannot follow the player into the next room.
   void _schedulePhaseCheck() {
     if (_phaseCheckScheduled) return;
     _phaseCheckScheduled = true;
@@ -111,6 +113,19 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
       _phaseCheckScheduled = false;
       if (!mounted) return;
       final RoomSessionState session = ref.read(roomSessionControllerProvider);
+      if (session.status == RoomSessionStatus.closed) {
+        final String? message = session.errorMessage;
+        if (message != null) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(content: Text(message)));
+        }
+        ref
+            .read(roomSessionControllerProvider.notifier)
+            .acknowledgeClosedRoom();
+        context.go('/');
+        return;
+      }
       if (session.snapshot?.status == RoomStatus.active) context.go('/match');
     });
   }
@@ -242,7 +257,10 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final RoomSessionState session = ref.watch(roomSessionControllerProvider);
     final RoomSnapshot? snapshot = session.snapshot;
 
-    if (snapshot == null) {
+    // The closed-room check must run even when the room data is already gone.
+    _schedulePhaseCheck();
+
+    if (session.status == RoomSessionStatus.closed || snapshot == null) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.prepareYourFleet)),
         body: Center(child: Text(l10n.roomNoLongerOpen)),
@@ -263,8 +281,6 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> {
     final Countdown? countdown = session.countdown;
     // A confirmed fleet is locked for the rest of the preparation phase.
     final bool locked = snapshot.status == RoomStatus.placement && ready;
-
-    _schedulePhaseCheck();
 
     return Scaffold(
       appBar: AppBar(

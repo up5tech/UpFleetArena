@@ -526,7 +526,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _hostPlacementSubscription = coordinator.hostPlacementStates.listen((
       PlacementState placement,
     ) {
-      state = state.copyWith(placement: placement);
+      // An accepted layout also clears the last rejection: otherwise the red
+      // hint stayed on the preparation screen for the rest of the room.
+      state = state.copyWith(placement: placement, placementError: null);
     });
 
     _hostReadinessSubscription = coordinator.hostReadinessStates.listen((
@@ -773,12 +775,28 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       reason: 'host_closed',
       message: 'The host closed the room.',
     );
-    state = state.copyWith(
-      status: RoomSessionStatus.closed,
-      errorMessage: 'The host closed the room.',
-    );
+    // This device closed its own room. The notice above is for the clients:
+    // storing it here made the host see "The host closed the room." on every
+    // later setup / preparation screen. A closed room is also terminal, so
+    // the old board, fleet, countdown and phase errors must not survive.
+    state = _closedRoomState(code: 'host_closed');
     await _teardown();
   }
+
+  /// The state of a room that just ended.
+  ///
+  /// [copyWith] on the live state would keep the old [snapshot] (still in the
+  /// placement phase), fleet, countdown and errors. Every screen that only
+  /// checks `snapshot != null` then kept rendering a room that was gone, and
+  /// the stale error message was repeated long after the close.
+  RoomSessionState _closedRoomState({
+    required String code,
+    String? message,
+  }) => RoomSessionState(
+    status: RoomSessionStatus.closed,
+    errorCode: code,
+    errorMessage: message,
+  );
 
   // --------------------------------------------------------------- client
 
@@ -850,7 +868,7 @@ class RoomSessionController extends Notifier<RoomSessionState> {
     _clientPlacementSubscription = session.placementStates.listen((
       PlacementState placement,
     ) {
-      state = state.copyWith(placement: placement);
+      state = state.copyWith(placement: placement, placementError: null);
     });
     _clientReadinessSubscription = session.readinessStates.listen((
       ReadinessState readiness,
@@ -887,6 +905,9 @@ class RoomSessionController extends Notifier<RoomSessionState> {
       _acceptTurnCountdown,
     );
     _eventSubscription = session.events.listen((RoomClientEvent event) {
+      // A late transport event (the watchdog can fire after the Host closed
+      // the sockets) must not replace the reason the room actually ended.
+      if (state.status == RoomSessionStatus.closed) return;
       switch (event) {
         case RoomJoinedEvent(:final String roomId):
           state = state.copyWith(
@@ -894,11 +915,10 @@ class RoomSessionController extends Notifier<RoomSessionState> {
             roomId: roomId,
           );
         case RoomClosedEvent(:final String reason, :final String message):
-          state = state.copyWith(
-            status: RoomSessionStatus.closed,
-            errorCode: reason,
-            errorMessage: message,
-          );
+          // Keep the reason for the one-time notice, but drop the room data:
+          // the client must not stay on a preparation board that no longer
+          // belongs to a room.
+          state = _closedRoomState(code: reason, message: message);
         case RoomErrorEvent(:final String code, :final String message):
           if (state.matchSnapshot != null && state.isInRoom) {
             state = state.copyWith(combatError: message, firePending: false);
@@ -971,6 +991,16 @@ class RoomSessionController extends Notifier<RoomSessionState> {
 
   /// Returns to the idle state, clearing any error.
   void reset() {
+    state = const RoomSessionState();
+  }
+
+  /// Clears a closed-room notice once the player was told about it.
+  ///
+  /// Without this, the message stayed in the session forever and every screen
+  /// that reads [RoomSessionState.errorMessage] kept repeating it on the way
+  /// back into a new room (PLAN.md §9.5, PHASE7 §3).
+  void acknowledgeClosedRoom() {
+    if (state.status != RoomSessionStatus.closed) return;
     state = const RoomSessionState();
   }
 

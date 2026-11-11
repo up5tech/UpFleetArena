@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:upfleet_arena/features/placement/presentation/placement_screen.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 import 'package:upfleet_arena/shared/widgets/board_canvas.dart';
@@ -21,6 +22,9 @@ class _FakeSessionController extends RoomSessionController {
 
   @override
   RoomSessionState build() => session;
+
+  /// The live Riverpod state, so a test can check an acknowledgement.
+  RoomSessionState get current => state;
 
   @override
   Future<List<String>> setPlacement(List<ShipPlacement> ships) async {
@@ -103,6 +107,38 @@ Widget _app(_FakeSessionController controller) {
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('en'),
       home: const PlacementScreen(),
+    ),
+  );
+}
+
+/// A router is needed to prove that a closed room leaves the preparation
+/// screen instead of keeping the stale board on it.
+GoRouter _router() => GoRouter(
+  initialLocation: '/placement',
+  routes: <RouteBase>[
+    GoRoute(
+      path: '/',
+      builder: (BuildContext context, GoRouterState state) =>
+          const Scaffold(body: Text('Home')),
+    ),
+    GoRoute(
+      path: '/placement',
+      builder: (BuildContext context, GoRouterState state) =>
+          const PlacementScreen(),
+    ),
+  ],
+);
+
+Widget _routedApp(_FakeSessionController controller) {
+  return ProviderScope(
+    overrides: [
+      roomSessionControllerProvider.overrideWith(() => controller),
+    ],
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      routerConfig: _router(),
     ),
   );
 }
@@ -645,6 +681,33 @@ void main() {
       find.byType(BoardCanvas),
     );
     expect(canvas.preview, isNull);
+  });
+
+  testWidgets('a closed room leaves the preparation screen and is told once', (
+    WidgetTester tester,
+  ) async {
+    // Reproduces the stale session that used to stay on the board: status
+    // closed, but the old placement snapshot and the client-facing notice
+    // were still in the state.
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session().copyWith(
+        status: RoomSessionStatus.closed,
+        errorCode: 'host_closed',
+        errorMessage: 'The host closed the room.',
+      ),
+    );
+    await tester.pumpWidget(_routedApp(controller));
+    await tester.pump();
+
+    // No stale board and no inline alert on the preparation screen.
+    expect(find.byType(BoardCanvas), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Home'), findsOneWidget);
+    // The reason is a one-time notice on Home, not a permanent page element.
+    expect(find.text('The host closed the room.'), findsOneWidget);
+    expect(controller.current.status, RoomSessionStatus.idle);
+    expect(controller.current.errorMessage, isNull);
   });
 
   testWidgets('a 320 px phone fits the board, actions and readiness list', (
