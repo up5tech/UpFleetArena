@@ -557,6 +557,96 @@ void main() {
     expect(controller.readyRequested, isTrue);
   });
 
+  testWidgets('the ghost follows the finger from the first cell crossing', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('4 cells'));
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    final TestGesture gesture = await tester.startGesture(
+      Offset(board.left + cell * 2.5, board.top + cell * 2.5),
+    );
+    // The ghost is already on the board on the first move; no placement is
+    // sent until the finger is released.
+    await gesture.moveBy(Offset(cell, 0));
+    await tester.pump();
+
+    final BoardCanvas canvas = tester.widget<BoardCanvas>(
+      find.byType(BoardCanvas),
+    );
+    expect(canvas.preview, isNotNull);
+    expect(canvas.preview!.row, 2);
+    expect(canvas.preview!.column, 3);
+
+    await gesture.up();
+    await tester.pump();
+    expect(controller.sentLayouts, hasLength(1));
+    expect(controller.sentLayouts.single.single.column, 3);
+  });
+
+  testWidgets('a dropped ship stays put while the Host confirms it', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('4 cells'));
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    await tester.tapAt(Offset(board.left + cell * 2, board.top + cell * 2));
+    await tester.pump();
+
+    // The fake Host never answers. The hull must not jump back to its old
+    // cell while the command is in flight.
+    final BoardCanvas canvas = tester.widget<BoardCanvas>(
+      find.byType(BoardCanvas),
+    );
+    expect(canvas.preview, isNull);
+    expect(canvas.ships, hasLength(1));
+    expect(canvas.ships.single.row, 2);
+    expect(canvas.ships.single.column, 2);
+  });
+
+  testWidgets('releasing a drag outside the board places nothing', (
+    WidgetTester tester,
+  ) async {
+    final _FakeSessionController controller = _FakeSessionController(
+      session: _session(),
+    );
+    await tester.pumpWidget(_app(controller));
+
+    await tester.tap(find.text('4 cells'));
+    await tester.pump();
+
+    final Rect board = tester.getRect(find.byType(BoardCanvas));
+    final double cell = board.width / RoomConfig.defaults.columns;
+    final TestGesture gesture = await tester.startGesture(
+      Offset(board.left + cell * 2.5, board.top + cell * 2.5),
+    );
+    await gesture.moveBy(Offset(cell, 0));
+    await tester.pump();
+    await gesture.moveTo(Offset(board.left + cell * 2.5, board.bottom + 40));
+    await gesture.up();
+    await tester.pump();
+
+    expect(controller.sentLayouts, isEmpty);
+    final BoardCanvas canvas = tester.widget<BoardCanvas>(
+      find.byType(BoardCanvas),
+    );
+    expect(canvas.preview, isNull);
+  });
+
   testWidgets('a 320 px phone fits the board, actions and readiness list', (
     WidgetTester tester,
   ) async {

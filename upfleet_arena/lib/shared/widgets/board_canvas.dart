@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals, mapEquals, setEquals;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:upfleet_arena/l10n/generated/app_localizations.dart';
 
@@ -12,7 +15,14 @@ import '../../game_engine/placement/placement.dart';
 /// The board is drawn with a [CustomPainter] instead of one widget per cell,
 /// so a 14×14 board stays cheap to render (PLAN.md §5.3). The widget reports
 /// the cell the finger is on, the placement logic stays outside.
-class BoardCanvas extends StatelessWidget {
+///
+/// A ship drag is handled at the pointer level instead of with the standard
+/// drag recognizers: the recognizers only start after a touch slop and have to
+/// fight the scroll view that contains the board, which made the ghost lag and
+/// let a vertical drag be cancelled mid-way. An eager recognizer claims the
+/// pointer as soon as a ship is picked up, while the [Listener] below reports
+/// every move from the first pixel.
+class BoardCanvas extends StatefulWidget {
   const BoardCanvas({
     super.key,
     required this.rows,
@@ -68,7 +78,10 @@ class BoardCanvas extends StatelessWidget {
   /// Whether the preview would fit on the board.
   final bool previewIsValid;
 
-  /// Called while the finger moves over the board.
+  /// Called while the finger moves over a cell of the board.
+  ///
+  /// Only a change of cell is reported: a pointer sends many events for the
+  /// same cell, and rebuilding for each one made dragging visibly stutter.
   final void Function(CellCoord cell)? onCellPreview;
 
   /// Called with the cell the finger touched, before any gesture is
@@ -97,8 +110,171 @@ class BoardCanvas extends StatelessWidget {
   /// Called when the finger is released over a cell.
   final void Function(CellCoord cell)? onCellCommit;
 
-  /// Called when a drag ends.
+  /// Called when a drag ends over a cell of the board.
+  ///
+  /// A drag that ends outside the board, or that is cancelled, does not call
+  /// it: the ghost simply disappears and nothing is placed.
   final VoidCallback? onDragEnd;
+
+  bool get _interactive =>
+      onCellPreview != null ||
+      onCellCommit != null ||
+      onPointerDown != null ||
+      onDragEnd != null;
+
+  @override
+  State<BoardCanvas> createState() => _BoardCanvasState();
+}
+
+class _BoardCanvasState extends State<BoardCanvas> {
+  /// The size of one cell, kept from the last layout for the pointer events.
+  double _cellSize = 1;
+
+  /// The pointer that started the current touch, if any.
+  int? _pointer;
+  Offset? _downPosition;
+  CellCoord? _downCell;
+
+  /// The last cell reported to the screen.
+  CellCoord? _lastCell;
+
+  /// Whether this touch belongs to the board or to the surrounding scroll view.
+  bool _ownsGesture = false;
+  bool _dragging = false;
+  bool _longPressActive = false;
+  Timer? _longPressTimer;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
+
+  CellCoord? _cellAt(Offset local) {
+    final int column = (local.dx / _cellSize).floor();
+    final int row = (local.dy / _cellSize).floor();
+    if (row < 0 ||
+        row >= widget.rows ||
+        column < 0 ||
+        column >= widget.columns) {
+      return null;
+    }
+    return CellCoord(row, column);
+  }
+
+  /// A ship held by the player, or a ship lying under the finger, is a drag.
+  ///
+  /// A touch on empty water is left to the page, so the player can still
+  /// scroll past a board that fills most of a phone screen.
+  bool _shouldOwnGesture(CellCoord cell) {
+    if (widget.selectedShipId != null) return true;
+    for (final ShipPlacement ship in widget.ships) {
+      if (ship.cells.contains(cell)) return true;
+    }
+    return false;
+  }
+
+  void _reportCell(CellCoord? cell) {
+    if (cell == _lastCell) return;
+    _lastCell = cell;
+    if (cell == null) {
+      widget.onPreviewCleared?.call();
+    } else {
+      widget.onCellPreview?.call(cell);
+    }
+  }
+
+  void _cancelLongPress() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_pointer != null) return;
+    final CellCoord? cell = _cellAt(event.localPosition);
+    _pointer = event.pointer;
+    _downPosition = event.localPosition;
+    _downCell = cell;
+    _lastCell = null;
+    _dragging = false;
+    _longPressActive = false;
+    _ownsGesture = cell != null && _shouldOwnGesture(cell);
+    if (cell == null) return;
+
+    widget.onPointerDown?.call(cell);
+    if (_ownsGesture) {
+      _longPressTimer = Timer(kLongPressTimeout, () {
+        _longPressActive = true;
+        widget.onLongPressStart?.call(cell);
+      });
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (event.pointer != _pointer || !_ownsGesture) return;
+    final Offset down = _downPosition!;
+    final CellCoord? cell = _cellAt(event.localPosition);
+    if (!_dragging) {
+      // A small jitter inside the touched cell is still a tap. Crossing into
+      // another cell (or travelling a full touch slop) starts the drag without
+      // waiting for the standard drag recognizer.
+      final bool movedFar = (event.localPosition - down).distance > kTouchSlop;
+      if (!movedFar && cell == _downCell) return;
+      _dragging = true;
+      _cancelLongPress();
+    }
+
+    if (_longPressActive) {
+      // A held finger swished sideways rotates the ship instead of moving it.
+      if (cell != null && cell != _lastCell) {
+        _lastCell = cell;
+        widget.onLongPressMove?.call(cell);
+      }
+      return;
+    }
+    _reportCell(cell);
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (event.pointer != _pointer) return;
+    if (_ownsGesture) {
+      final CellCoord? cell = _cellAt(event.localPosition);
+      if (_longPressActive) {
+        widget.onLongPressEnd?.call();
+        _reportCell(null);
+      } else if (_dragging) {
+        if (cell == null) {
+          // Releasing outside the board cancels the drop (PHASE3 §1.5).
+          _reportCell(null);
+        } else {
+          _reportCell(cell);
+          widget.onDragEnd?.call();
+        }
+      } else {
+        _reportCell(null);
+        if (cell != null) widget.onCellCommit?.call(cell);
+      }
+    }
+    _finishPointer();
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (event.pointer != _pointer) return;
+    if (_longPressActive) widget.onLongPressEnd?.call();
+    if (_ownsGesture) _reportCell(null);
+    _finishPointer();
+  }
+
+  void _finishPointer() {
+    _cancelLongPress();
+    _pointer = null;
+    _downPosition = null;
+    _downCell = null;
+    _lastCell = null;
+    _dragging = false;
+    _longPressActive = false;
+    _ownsGesture = false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,101 +282,91 @@ class BoardCanvas extends StatelessWidget {
       builder: (BuildContext context, BoxConstraints constraints) {
         final double available = math.min(
           constraints.maxWidth,
-          constraints.maxHeight.isFinite ? constraints.maxHeight : constraints.maxWidth,
+          constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : constraints.maxWidth,
         );
         final double cellSize = math.min(
-          available / columns,
-          available / rows,
+          available / widget.columns,
+          available / widget.rows,
+        );
+        _cellSize = cellSize;
+
+        final Widget paint = RepaintBoundary(
+          child: CustomPaint(
+            painter: BoardPainter(
+              rows: widget.rows,
+              columns: widget.columns,
+              ships: widget.ships,
+              shots: widget.shots,
+              misses: widget.misses,
+              shotColors: widget.shotColors,
+              sunkShips: widget.sunkShips,
+              selectedShipId: widget.selectedShipId,
+              preview: widget.preview,
+              previewIsValid: widget.previewIsValid,
+            ),
+          ),
         );
 
-        CellCoord? cellAt(Offset local) {
-          final int column = (local.dx / cellSize).floor();
-          final int row = (local.dy / cellSize).floor();
-          if (row < 0 || row >= rows || column < 0 || column >= columns) {
-            return null;
-          }
-          return CellCoord(row, column);
-        }
-
-        void previewAt(Offset local) {
-          final CellCoord? cell = cellAt(local);
-          if (cell != null) {
-            onCellPreview?.call(cell);
-          } else {
-            onPreviewCleared?.call();
-          }
-        }
+        final Widget board = SizedBox(
+          width: cellSize * widget.columns,
+          height: cellSize * widget.rows,
+          child: paint,
+        );
 
         return Center(
           child: Semantics(
-            label: AppLocalizations.of(context).ownBoardSemantics(rows, columns),
+            label: AppLocalizations.of(context)
+                .ownBoardSemantics(widget.rows, widget.columns),
             container: true,
-            child: Listener(
-              onPointerDown: (PointerDownEvent event) {
-                final CellCoord? cell = cellAt(event.localPosition);
-                if (cell != null) onPointerDown?.call(cell);
-              },
-              child: SizedBox(
-                width: cellSize * columns,
-                height: cellSize * rows,
-                child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (TapDownDetails details) {
-                  final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onCellPreview?.call(cell);
-                },
-                onTapUp: (TapUpDetails details) {
-                  final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onCellCommit?.call(cell);
-                },
-                onTapCancel: onPreviewCleared,
-                onLongPressStart: (LongPressStartDetails details) {
-                  final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onLongPressStart?.call(cell);
-                },
-                onLongPressMoveUpdate: (LongPressMoveUpdateDetails details) {
-                  final CellCoord? cell = cellAt(details.localPosition);
-                  if (cell != null) onLongPressMove?.call(cell);
-                },
-                onLongPressEnd: (LongPressEndDetails details) =>
-                    onLongPressEnd?.call(),
-                // Dragging is recognized per axis: a free pan needs twice the
-                // touch slop, so a vertical drag inside a scrolling page would
-                // be stolen by the scroll view before the board saw it.
-                onVerticalDragStart: (DragStartDetails details) =>
-                    previewAt(details.localPosition),
-                onVerticalDragUpdate: (DragUpdateDetails details) =>
-                    previewAt(details.localPosition),
-                onVerticalDragEnd: (DragEndDetails details) => onDragEnd?.call(),
-                onVerticalDragCancel: onDragEnd,
-                onHorizontalDragStart: (DragStartDetails details) =>
-                    previewAt(details.localPosition),
-                onHorizontalDragUpdate: (DragUpdateDetails details) =>
-                    previewAt(details.localPosition),
-                onHorizontalDragEnd: (DragEndDetails details) =>
-                    onDragEnd?.call(),
-                onHorizontalDragCancel: onDragEnd,
-                child: CustomPaint(
-                  painter: BoardPainter(
-                    rows: rows,
-                    columns: columns,
-                    ships: ships,
-                    shots: shots,
-                    misses: misses,
-                    shotColors: shotColors,
-                    sunkShips: sunkShips,
-                    selectedShipId: selectedShipId,
-                    preview: preview,
-                    previewIsValid: previewIsValid,
-                  ),
-                ),
-                ),
-              ),
-            ),
+            child: widget._interactive
+                ? RawGestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    gestures: <Type, GestureRecognizerFactory>{
+                      _BoardGestureRecognizer:
+                          GestureRecognizerFactoryWithHandlers<
+                            _BoardGestureRecognizer
+                          >(
+                            () => _BoardGestureRecognizer(
+                              shouldClaim: () => _ownsGesture,
+                            ),
+                            (_BoardGestureRecognizer instance) {
+                              instance.shouldClaim = () => _ownsGesture;
+                            },
+                          ),
+                    },
+                    child: Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: _onPointerDown,
+                      onPointerMove: _onPointerMove,
+                      onPointerUp: _onPointerUp,
+                      onPointerCancel: _onPointerCancel,
+                      child: board,
+                    ),
+                  )
+                : board,
           ),
         );
       },
     );
+  }
+}
+
+/// Claims the gesture on pointer down so the page cannot scroll away while a
+/// ship is being dragged.
+///
+/// The claim is conditional: a touch on empty water with nothing selected is
+/// left to the surrounding [ListView].
+class _BoardGestureRecognizer extends EagerGestureRecognizer {
+  _BoardGestureRecognizer({required this.shouldClaim});
+
+  bool Function() shouldClaim;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (!shouldClaim()) return;
+    super.addAllowedPointer(event);
   }
 }
 
@@ -408,11 +574,11 @@ class BoardPainter extends CustomPainter {
   bool shouldRepaint(covariant BoardPainter oldDelegate) =>
       oldDelegate.rows != rows ||
       oldDelegate.columns != columns ||
-      oldDelegate.ships != ships ||
-      oldDelegate.shots != shots ||
-      oldDelegate.misses != misses ||
-      oldDelegate.shotColors != shotColors ||
-      oldDelegate.sunkShips != sunkShips ||
+      !listEquals(oldDelegate.ships, ships) ||
+      !listEquals(oldDelegate.shots, shots) ||
+      !listEquals(oldDelegate.misses, misses) ||
+      !mapEquals(oldDelegate.shotColors, shotColors) ||
+      !setEquals(oldDelegate.sunkShips, sunkShips) ||
       oldDelegate.selectedShipId != selectedShipId ||
       oldDelegate.preview != preview ||
       oldDelegate.previewIsValid != previewIsValid;
